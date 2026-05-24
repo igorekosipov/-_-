@@ -112,6 +112,9 @@ async def show_lottery(message: Message):
             taken_rows = await cursor.fetchall()
             taken = set([row[0] for row in taken_rows])
 
+        user_ticket_count = await db.get_user_ticket_count(message.from_user.id)
+        price = PRICE_FIRST if user_ticket_count == 0 else PRICE_DISCOUNT
+        
         buttons = []
 
         # 150 билетов, 8 в строке = 19 строк
@@ -131,16 +134,37 @@ async def show_lottery(message: Message):
             InlineKeyboardButton(text="🔄 Обновить", callback_data="refresh"),
             InlineKeyboardButton(text="❌ Отмена", callback_data="cancel")
         ])
+        
+        timer_info = await db.get_lottery_timer()
+        timer_start, timer_end, is_timer_active = timer_info if timer_info else (None, None, False)
+        
+        timer_text = ""
+        if is_timer_active and timer_end:
+            end_time = datetime.fromisoformat(timer_end) if isinstance(timer_end, str) else timer_end
+            time_left = end_time - datetime.now()
+            days = time_left.days
+            hours = time_left.seconds // 3600
+            minutes = (time_left.seconds % 3600) // 60
+            if days > 0:
+                timer_text = f"⏰ ДО РОЗЫГРЫША: {days}д {hours}ч {minutes}мин"
+            else:
+                timer_text = f"⏰ ДО РОЗЫГРЫША: {hours}ч {minutes}мин"
 
         lottery_text = f"""
-🎰 РОЗЫГРЫШ
-━━━━━━━━━━━━━━━
+🎰 АКТУАЛЬНЫЙ РОЗЫГРЫШ
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🏆 ПРИЗ: {PRIZE_INFO['name']}
+📝 ОПИСАНИЕ: {PRIZE_INFO['description']}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🎫 ПРОДАНО: {sold}/150
-━━━━━━━━━━━━━━━
-👇 ВЫБЕРИТЕ БИЛЕТ:
+✨ ДОСТУПНО: {150 - sold}
+💰 ЦЕНА БИЛЕТА: {price}₽{timer_text}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📌 Ваш баланс билетов: {user_ticket_count}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+👇 ВЫБЕРИТЕ НОМЕР БИЛЕТА (1-150):
 """
-
+        
         await message.answer(
             lottery_text,
             reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons)
@@ -148,6 +172,8 @@ async def show_lottery(message: Message):
 
     except Exception as e:
         await message.answer(f"❌ Ошибка: {str(e)}")
+        print(f"Ошибка: {e}")
+
 
 @router.callback_query(F.data.startswith("buy_"))
 async def buy_ticket(callback: CallbackQuery, state: FSMContext):
