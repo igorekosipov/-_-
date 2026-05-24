@@ -21,7 +21,7 @@ async def check_and_run_lottery(bot):
                 # УСЛОВИЕ 1: Проданы ВСЕ 100 билетов - МГНОВЕННЫЙ РОЗЫГРЫШ
                 if sold >= TOTAL_TICKETS and is_active:
                     should_draw = True
-                    reason = "Проданы все 100 билетов"
+                    reason = "Проданы все 150 билетов"
                     if is_timer_active:
                         await db.stop_lottery_timer()
 
