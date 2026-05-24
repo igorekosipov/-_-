@@ -89,7 +89,7 @@ async def how_to_get_prize(message: Message):
 3️⃣ Менеджер уточнит данные для отправки
 4️⃣ Приз отправляется СДЭКом в течение 3 дней
 
-Для связи с менеджером: @manager_username
+Для связи с менеджером: @IgoroOsipov1
 """
     await message.answer(text, reply_markup=main_menu())
 
@@ -194,8 +194,8 @@ async def buy_ticket(callback: CallbackQuery, state: FSMContext):
 Вы выбрали билет №{ticket_num}
 
 🏦 РЕКВИЗИТЫ ДЛЯ ОПЛАТЫ:
-Сбербанк: 1234 5678 9012 3456
-Получатель: Иванов Иван Иванович
+Т-Банк: 2200 7004 3556 8828
+Получатель: Наталья О.
 Сумма: {price} рублей
 Назначение: Подписка на бота 10 дней
 
