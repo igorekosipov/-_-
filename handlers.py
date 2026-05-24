@@ -117,19 +117,23 @@ async def show_lottery(message: Message):
         user_ticket_count = await db.get_user_ticket_count(message.from_user.id)
         price = PRICE_FIRST if user_ticket_count == 0 else PRICE_DISCOUNT
         
+        from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+        
         buttons = []
 
-        # 15 СТРОК ПО 10 КНОПОК = 150 БИЛЕТОВ
-        for row in range(15):  # 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14
+        # 19 СТРОК ПО 8 БИЛЕТОВ = 152 (покажем 150)
+        # Номера билетов: 1-8, 9-16, 17-24, ... до 145-152 (покажем до 150)
+        for row in range(19):  # 0-18 = 19 строк
             row_buttons = []
-            for col in range(1, 11):  # 1,2,3,4,5,6,7,8,9,10
-                ticket_num = row * 10 + col
+            for col in range(1, 9):  # 1-8 = 8 кнопок в строке
+                ticket_num = row * 8 + col
                 if ticket_num <= TOTAL_TICKETS:
                     if ticket_num in taken:
-                        row_buttons.append(InlineKeyboardButton(text="🔒", callback_data="sold"))
+                        row_buttons.append(InlineKeyboardButton(text=f"🔒", callback_data="sold"))
                     else:
                         row_buttons.append(InlineKeyboardButton(text=str(ticket_num), callback_data=f"buy_{ticket_num}"))
-            buttons.append(row_buttons)
+            if row_buttons:  # добавляем строку только если есть кнопки
+                buttons.append(row_buttons)
         
         buttons.append([
             InlineKeyboardButton(text="🔄 Обновить", callback_data="refresh"),
@@ -147,9 +151,9 @@ async def show_lottery(message: Message):
             hours = time_left.seconds // 3600
             minutes = (time_left.seconds % 3600) // 60
             if days > 0:
-                timer_text = f"\n⏰ ДО РОЗЫГРЫША: {days}д {hours}ч {minutes}мин"
+                timer_text = f"⏰ ДО РОЗЫГРЫША: {days}д {hours}ч {minutes}мин"
             else:
-                timer_text = f"\n⏰ ДО РОЗЫГРЫША: {hours}ч {minutes}мин"
+                timer_text = f"⏰ ДО РОЗЫГРЫША: {hours}ч {minutes}мин"
         
         lottery_text = f"""
 🎰 АКТУАЛЬНЫЙ РОЗЫГРЫШ
@@ -159,7 +163,8 @@ async def show_lottery(message: Message):
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🎫 ПРОДАНО: {sold}/{TOTAL_TICKETS}
 ✨ ДОСТУПНО: {len(available)}
-💰 ЦЕНА БИЛЕТА: {price}₽{timer_text}
+💰 ЦЕНА БИЛЕТА: {price}₽
+{timer_text}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📌 Ваш баланс билетов: {user_ticket_count}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -174,7 +179,6 @@ async def show_lottery(message: Message):
     except Exception as e:
         await message.answer(f"❌ Ошибка: {str(e)}")
         print(f"Ошибка: {e}")
-
 
 @router.callback_query(F.data.startswith("buy_"))
 async def buy_ticket(callback: CallbackQuery, state: FSMContext):
