@@ -345,7 +345,7 @@ async def invalid_receipt(message: Message):
     )
 
 
-@router.message(F.text == "🎫 Купленные билеты")
+@router.message(F.text == "🎫 Твои билеты")  # ← ИЗМЕНЕНО
 async def show_my_tickets(message: Message):
     try:
         tickets = await db.get_user_tickets(message.from_user.id)
@@ -359,7 +359,7 @@ async def show_my_tickets(message: Message):
             )
             return
 
-        text = f"🎫 ВАШИ АКТИВНЫЕ БИЛЕТЫ:\n━━━━━━━━━━━━━━━━━\n"
+        text = f"🎫 ТВОИ БИЛЕТЫ:\n━━━━━━━━━━━━━━━━━\n"
         for ticket_num, purchase_date, confirmed in tickets:
             if confirmed:
                 date_str = datetime.fromisoformat(purchase_date).strftime('%d.%m.%Y')
@@ -371,7 +371,6 @@ async def show_my_tickets(message: Message):
 
     except Exception as e:
         await message.answer(f"❌ Ошибка: {str(e)}")
-
 
 @router.message(F.text == "🏆 Последний билет")
 async def last_draw_winner(message: Message):
