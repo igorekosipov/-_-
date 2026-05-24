@@ -18,7 +18,7 @@ PAYMENT_DETAILS = """
 PRIZE_INFO = {
     "name": "Sony PlayStation 5",
     "description": "Игровая консоль",
-    "photo": ""
+    "photo": "https://iprofishop.ru/upload/iblock/52a/jq7d52ur5reyrkneywl1ex7yqudxoi2m.png"
 }
 
 PRICE_FIRST = 800
