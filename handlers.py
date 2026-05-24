@@ -166,11 +166,10 @@ async def show_lottery(message: Message):
 👇 ВЫБЕРИТЕ НОМЕР БИЛЕТА (1-150):
 """
         
-        await message.answer_photo(
-            photo=PRIZE_INFO["photo"],
-            caption=lottery_text,
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons)
-        )
+        await message.answer(
+    lottery_text,
+    reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons)
+)
 
     except Exception as e:
         await message.answer(f"❌ Ошибка: {str(e)}")
