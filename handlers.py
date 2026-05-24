@@ -113,7 +113,16 @@ async def show_lottery(message: Message):
             taken = set([row[0] for row in taken_rows])
 
         user_ticket_count = await db.get_user_ticket_count(message.from_user.id)
-        price = PRICE_FIRST if user_ticket_count == 0 else PRICE_DISCOUNT
+        
+        # Определяем цену: если у пользователя есть реферер и это первая покупка
+        async with aiosqlite.connect(db.DATABASE_PATH) as conn:
+            cursor = await conn.execute("SELECT referrer_id FROM users WHERE user_id = ?", (message.from_user.id,))
+            referrer_data = await cursor.fetchone()
+            
+            if referrer_data and referrer_data[0] and user_ticket_count == 0:
+                price = 500  # Специальная цена для приведенных друзей
+            else:
+                price = PRICE_FIRST if user_ticket_count == 0 else PRICE_DISCOUNT
 
         buttons = []
 
@@ -135,6 +144,37 @@ async def show_lottery(message: Message):
             InlineKeyboardButton(text="❌ Отмена", callback_data="cancel")
         ])
 
+        # ========== НОВЫЙ ТЕКСТ ТАЙМЕРА ==========
+        timer_info = await db.get_lottery_timer()
+        timer_start, timer_end, is_timer_active = timer_info if timer_info else (None, None, False)
+
+        timer_text = ""
+        if is_timer_active and timer_end:
+            end_time = datetime.fromisoformat(timer_end) if isinstance(timer_end, str) else timer_end
+            time_left = end_time - datetime.now()
+            if time_left.total_seconds() > 0:
+                days = time_left.days
+                hours = time_left.seconds // 3600
+                minutes = (time_left.seconds % 3600) // 60
+                seconds = time_left.seconds % 60
+                
+                if days > 0:
+                    timer_text = f"⏰ ДО РОЗЫГРЫША: {days}д {hours}ч {minutes}мин"
+                elif hours > 0:
+                    timer_text = f"⏰ ДО РОЗЫГРЫША: {hours}ч {minutes}мин"
+                elif minutes > 0:
+                    timer_text = f"⏰ ДО РОЗЫГРЫША: {minutes}мин {seconds}с"
+                else:
+                    timer_text = f"⏰ ДО РОЗЫГРЫША: {seconds}с"
+            else:
+                timer_text = "🎲 РОЗЫГРЫШ БУДЕТ ПРОВЕДЕН В БЛИЖАЙШЕЕ ВРЕМЯ!"
+        elif sold >= 70 and not is_timer_active:
+            timer_text = "🎯 ТАЙМЕР ЗАПУСТИТСЯ ПРИ ДОСТИЖЕНИИ 70 ПРОДАННЫХ БИЛЕТОВ!"
+        elif sold >= TOTAL_TICKETS:
+            timer_text = "🎲 ВСЕ БИЛЕТЫ ПРОДАНЫ! РОЗЫГРЫШ СОСТОИТСЯ СЕЙЧАС!"
+        elif sold < 70:
+            timer_text = f"⏳ ДО ЗАПУСКА ТАЙМЕРА: {70 - sold} билетов"
+
         lottery_text = f"""
 🎰 АКТУАЛЬНЫЙ РОЗЫГРЫШ
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -144,6 +184,7 @@ async def show_lottery(message: Message):
 🎫 ПРОДАНО: {sold}/{TOTAL_TICKETS}
 ✨ ДОСТУПНО: {TOTAL_TICKETS - sold}
 💰 ЦЕНА БИЛЕТА: {price}₽
+{timer_text}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📌 Ваш баланс билетов: {user_ticket_count}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -158,7 +199,6 @@ async def show_lottery(message: Message):
     except Exception as e:
         await message.answer(f"❌ Ошибка: {str(e)}")
         print(f"Ошибка: {e}")
-
 
 @router.callback_query(F.data.startswith("buy_"))
 async def buy_ticket(callback: CallbackQuery, state: FSMContext):
