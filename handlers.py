@@ -24,20 +24,20 @@ async def cmd_start(message: Message, state: FSMContext):
                 referrer_id = None
         except:
             pass
-    
+
     await state.clear()
     await db.add_user(
-        message.from_user.id, 
-        message.from_user.username, 
+        message.from_user.id,
+        message.from_user.username,
         message.from_user.full_name,
         referrer_id
     )
-    
+
     if referrer_id and referrer_id != message.from_user.id:
         await db.add_referral(referrer_id, message.from_user.id)
-    
+
     await db.cleanup_expired_subscriptions()
-    
+
     welcome_text = """
 🎉 Добро пожаловать в розыгрыш ценных призов!
 
@@ -46,11 +46,10 @@ async def cmd_start(message: Message, state: FSMContext):
 🚚 Доставка СДЭК по всей России
 
 🎁 АКЦИИ:
-• Первый билет — 700₽
-• Последующие билеты — 600₽
-• Приведи друга → получи бесплатный билет
-• Купи 20 билетов → бесплатный билет
-• Купи 70 билетов → физический приз в подарок!
+• Первый билет — 800₽
+• Последующие билеты — 700₽
+• Приведи 5 друзей → получи бесплатный билет
+• Друзья получат первый билет за 500₽ (вместо 800₽)
 
 Используйте меню для навигации
 """
@@ -73,8 +72,9 @@ async def show_rules(message: Message):
 3. Ждите розыгрыша и забирайте приз!
 
 ЦЕНЫ:
-• Первый билет — 700₽
-• Все последующие билеты — 600₽
+• Первый билет — 800₽
+• Все последующие билеты — 700₽
+• Для приведенных друзей: первый билет — 500₽
 """
     await message.answer(rules, reply_markup=main_menu())
 
@@ -114,15 +114,15 @@ async def show_lottery(message: Message):
 
         user_ticket_count = await db.get_user_ticket_count(message.from_user.id)
         price = PRICE_FIRST if user_ticket_count == 0 else PRICE_DISCOUNT
-        
+
         buttons = []
 
-        # 150 билетов, 8 в строке = 19 строк
-        for i in range(0, 150, 8):
+        # 100 БИЛЕТОВ, 8 В СТРОКЕ = 13 СТРОК
+        for i in range(0, 104, 8):
             row_buttons = []
             for j in range(1, 9):
                 ticket_num = i + j
-                if ticket_num <= 150:
+                if 1 <= ticket_num <= TOTAL_TICKETS:
                     if ticket_num in taken:
                         row_buttons.append(InlineKeyboardButton(text="🔒", callback_data="sold"))
                     else:
@@ -134,21 +134,6 @@ async def show_lottery(message: Message):
             InlineKeyboardButton(text="🔄 Обновить", callback_data="refresh"),
             InlineKeyboardButton(text="❌ Отмена", callback_data="cancel")
         ])
-        
-        timer_info = await db.get_lottery_timer()
-        timer_start, timer_end, is_timer_active = timer_info if timer_info else (None, None, False)
-        
-        timer_text = ""
-        if is_timer_active and timer_end:
-            end_time = datetime.fromisoformat(timer_end) if isinstance(timer_end, str) else timer_end
-            time_left = end_time - datetime.now()
-            days = time_left.days
-            hours = time_left.seconds // 3600
-            minutes = (time_left.seconds % 3600) // 60
-            if days > 0:
-                timer_text = f"⏰ ДО РОЗЫГРЫША: {days}д {hours}ч {minutes}мин"
-            else:
-                timer_text = f"⏰ ДО РОЗЫГРЫША: {hours}ч {minutes}мин"
 
         lottery_text = f"""
 🎰 АКТУАЛЬНЫЙ РОЗЫГРЫШ
@@ -156,15 +141,15 @@ async def show_lottery(message: Message):
 🏆 ПРИЗ: {PRIZE_INFO['name']}
 📝 ОПИСАНИЕ: {PRIZE_INFO['description']}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🎫 ПРОДАНО: {sold}/150
-✨ ДОСТУПНО: {150 - sold}
-💰 ЦЕНА БИЛЕТА: {price}₽{timer_text}
+🎫 ПРОДАНО: {sold}/{TOTAL_TICKETS}
+✨ ДОСТУПНО: {TOTAL_TICKETS - sold}
+💰 ЦЕНА БИЛЕТА: {price}₽
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📌 Ваш баланс билетов: {user_ticket_count}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-👇 ВЫБЕРИТЕ НОМЕР БИЛЕТА (1-150):
+👇 ВЫБЕРИТЕ НОМЕР БИЛЕТА (1-100):
 """
-        
+
         await message.answer(
             lottery_text,
             reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons)
@@ -189,9 +174,18 @@ async def buy_ticket(callback: CallbackQuery, state: FSMContext):
                 await callback.answer("❌ Этот билет уже куплен!", show_alert=True)
                 return
 
-        user_ticket_count = await db.get_user_ticket_count(callback.from_user.id)
-        price = PRICE_FIRST if user_ticket_count == 0 else PRICE_DISCOUNT
-        
+        # Проверяем, пришел ли пользователь по реферальной ссылке
+        async with aiosqlite.connect(db.DATABASE_PATH) as conn:
+            cursor = await conn.execute("SELECT referrer_id FROM users WHERE user_id = ?", (callback.from_user.id,))
+            referrer_data = await cursor.fetchone()
+            
+            # Если есть реферер и это первая покупка пользователя
+            user_ticket_count = await db.get_user_ticket_count(callback.from_user.id)
+            if referrer_data and referrer_data[0] and user_ticket_count == 0:
+                price = 500  # Специальная цена для приведенных друзей
+            else:
+                price = PRICE_FIRST if user_ticket_count == 0 else PRICE_DISCOUNT
+
         await state.update_data(ticket_number=ticket_num, price=price)
 
         payment_text = f"""
@@ -309,9 +303,7 @@ async def show_my_tickets(message: Message):
         if not tickets:
             await message.answer(
                 "📭 У вас пока нет активных билетов.\n\n"
-                f"💰 Всего куплено билетов за всё время: {ticket_count}\n"
-                f"🎯 До следующей акции: {20 - ticket_count if ticket_count < 20 else 0} билетов до бесплатного билета\n"
-                f"🏆 До физического приза: {70 - ticket_count if ticket_count < 70 else 0} билетов",
+                f"💰 Всего куплено билетов за всё время: {ticket_count}",
                 reply_markup=main_menu()
             )
             return
@@ -321,7 +313,7 @@ async def show_my_tickets(message: Message):
             if confirmed:
                 date_str = datetime.fromisoformat(purchase_date).strftime('%d.%m.%Y')
                 text += f"🔸 Билет №{ticket_num} (куплен {date_str})\n"
-        
+
         text += f"\n📊 ВСЕГО КУПЛЕНО: {ticket_count} билетов"
 
         await message.answer(text, reply_markup=main_menu())
@@ -334,11 +326,11 @@ async def show_my_tickets(message: Message):
 async def last_draw_winner(message: Message):
     try:
         winner = await db.get_last_winner()
-        
+
         if winner:
             winner_id, winner_ticket, draw_date = winner
             date_str = datetime.fromisoformat(draw_date).strftime('%d.%m.%Y %H:%M')
-            
+
             await message.answer(
                 f"🏆 ПОСЛЕДНИЙ РОЗЫГРЫШ\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
                 f"🎲 ВЫИГРЫШНЫЙ БИЛЕТ: №{winner_ticket}\n"
@@ -348,7 +340,11 @@ async def last_draw_winner(message: Message):
             )
         else:
             await message.answer(
-                "📭 Пока не было проведено ни одного розыгрыша.",
+                "📭 Пока не было проведено ни одного розыгрыша.\n\n"
+                "Розыгрыш состоится когда:\n"
+                "• Будет продано 60+ билетов, или\n"
+                "• Пройдёт 4 дня, или\n"
+                "• Будут проданы все 100 билетов",
                 reply_markup=main_menu()
             )
     except Exception as e:
@@ -358,27 +354,25 @@ async def last_draw_winner(message: Message):
 @router.message(F.text == "🎁 Акции")
 async def show_promotions(message: Message):
     ticket_count = await db.get_user_ticket_count(message.from_user.id)
+    referrals_count = await db.get_five_referrals_count(message.from_user.id)
     
+    referrals_needed = 5 - referrals_count if referrals_count < 5 else 0
+
     text = f"""
 🎁 АКТУАЛЬНЫЕ АКЦИИ 🎁
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 1️⃣ ПЕРВЫЙ БИЛЕТ СО СКИДКОЙ
-• Первый билет — 700₽
-• Последующие билеты — 600₽
+• Первый билет — 800₽
+• Последующие билеты — 700₽
 
-2️⃣ ПРИВЕДИ ДРУГА
-• Приведи друга, который купит билет
-• Ты получишь БЕСПЛАТНЫЙ билет на выбор
-• Друг получит скидку 600₽ на билет
+2️⃣ ПРИВЕДИ 5 ДРУЗЕЙ
+• Приведи 5 друзей, которые купят билеты
+• Ты получишь БЕСПЛАТНЫЙ билет на выбор!
+• Друзья получат первый билет за 500₽ (вместо 800₽)
 
-3️⃣ ЗА 20 КУПЛЕННЫХ БИЛЕТОВ
-• Бесплатный билет на следующий розыгрыш
-• Ваш прогресс: {ticket_count}/20
-
-4️⃣ ЗА 70 КУПЛЕННЫХ БИЛЕТОВ
-• Бесплатный физический приз (рандомный)
-• Ваш прогресс: {ticket_count}/70
+📊 Ваш прогресс: {referrals_count}/5 друзей
+{'🎉 ВЫ УЖЕ ПОЛУЧИЛИ БЕСПЛАТНЫЙ БИЛЕТ!' if referrals_count >= 5 else f'🎯 Осталось привести: {referrals_needed} друзей'}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 💫 Активируйте акции, участвуя в розыгрышах!
@@ -390,12 +384,12 @@ async def show_promotions(message: Message):
 async def show_referral(message: Message):
     user_id = message.from_user.id
     bot_username = (await message.bot.get_me()).username
-    
+
     referral_link = f"https://t.me/{bot_username}?start=ref_{user_id}"
-    
+
     referrals_count = await db.get_referrals_count(user_id)
     referrals_list = await db.get_referral_list(user_id)
-    
+
     text = f"""
 👥 РЕФЕРАЛЬНАЯ ПРОГРАММА 👥
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -409,14 +403,14 @@ async def show_referral(message: Message):
 • Из них купили билет: {referrals_count}
 
 🎁 ВОЗНАГРАЖДЕНИЕ:
-За каждого друга, который купит билет:
-• ВЫ получаете БЕСПЛАТНЫЙ билет
-• ДРУГ получает скидку 600₽ на билет
+За каждых 5 друзей, которые купят билеты:
+• ВЫ получаете БЕСПЛАТНЫЙ билет!
+• ДРУЗЬЯ получают первый билет за 500₽
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 👥 ПРИГЛАШЕННЫЕ ДРУЗЬЯ:
 """
-    
+
     if referrals_list:
         for ref_id, username, bought, date in referrals_list[-5:]:
             status = "✅ купил" if bought else "⏳ ожидает"
@@ -424,5 +418,5 @@ async def show_referral(message: Message):
             text += f"\n• {username_str} — {status}"
     else:
         text += "\nПока нет приглашенных друзей"
-    
+
     await message.answer(text, parse_mode="Markdown", reply_markup=main_menu())
