@@ -28,7 +28,7 @@ async def init_db():
                 expires_at TIMESTAMP,
                 payment_confirmed BOOLEAN DEFAULT 0,
                 receipt_photo TEXT,
-                price_paid INTEGER DEFAULT 700
+                price_paid INTEGER DEFAULT 800
             )
         """)
 
@@ -115,16 +115,13 @@ async def confirm_payment(subscription_id: int):
             UPDATE subscriptions SET payment_confirmed = 1 WHERE id = ?
         """, (subscription_id,))
 
-        # Получаем user_id и ticket_number
         cursor = await db.execute("SELECT user_id, ticket_number FROM subscriptions WHERE id = ?", (subscription_id,))
         user_id, ticket_num = await cursor.fetchone()
 
-        # Обновляем количество купленных билетов пользователя
         await db.execute("""
             UPDATE users SET total_tickets_bought = total_tickets_bought + 1 WHERE user_id = ?
         """, (user_id,))
 
-        # Увеличиваем счетчик проданных билетов
         await db.execute("""
             UPDATE current_lottery SET tickets_sold = tickets_sold + 1 WHERE id = 1
         """)
@@ -265,42 +262,32 @@ async def get_referral_list(user_id: int):
         return await cursor.fetchall()
 
 
-async def check_and_give_free_ticket(user_id: int, bot):
-    """Проверка акции: за 20 купленных билетов - бесплатный билет"""
-    ticket_count = await get_user_ticket_count(user_id)
-    
+async def get_five_referrals_count(user_id: int):
+    """Проверка на 5 приведенных друзей"""
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        cursor = await db.execute("""
+            SELECT COUNT(*) FROM referrals 
+            WHERE referrer_id = ? AND referred_bought_ticket = 1
+        """, (user_id,))
+        result = await cursor.fetchone()
+        return result[0] if result else 0
+
+
+async def check_and_give_free_ticket_for_5_referrals(user_id: int):
+    """Акция: за 5 приведенных друзей - бесплатный билет"""
+    count = await get_five_referrals_count(user_id)
+
     async with aiosqlite.connect(DATABASE_PATH) as db:
         cursor = await db.execute("""
             SELECT id FROM promotions 
-            WHERE user_id = ? AND promo_type = '20_tickets' AND reward_given = 1
+            WHERE user_id = ? AND promo_type = '5_referrals' AND reward_given = 1
         """, (user_id,))
         already_given = await cursor.fetchone()
-        
-        if ticket_count >= 20 and not already_given:
+
+        if count >= 5 and not already_given:
             await db.execute("""
                 INSERT INTO promotions (promo_type, user_id, triggered_at, reward_given)
-                VALUES ('20_tickets', ?, ?, 1)
-            """, (user_id, datetime.now()))
-            await db.commit()
-            return True
-    return False
-
-
-async def check_and_give_physical_prize(user_id: int):
-    """Проверка акции: за 70 билетов - физический приз"""
-    ticket_count = await get_user_ticket_count(user_id)
-    
-    async with aiosqlite.connect(DATABASE_PATH) as db:
-        cursor = await db.execute("""
-            SELECT id FROM promotions 
-            WHERE user_id = ? AND promo_type = '70_tickets' AND reward_given = 1
-        """, (user_id,))
-        already_given = await cursor.fetchone()
-        
-        if ticket_count >= 70 and not already_given:
-            await db.execute("""
-                INSERT INTO promotions (promo_type, user_id, triggered_at, reward_given)
-                VALUES ('70_tickets', ?, ?, 1)
+                VALUES ('5_referrals', ?, ?, 1)
             """, (user_id, datetime.now()))
             await db.commit()
             return True
