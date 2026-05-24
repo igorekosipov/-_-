@@ -18,14 +18,12 @@ async def check_and_run_lottery(bot):
                 should_draw = False
                 reason = ""
 
-                # УСЛОВИЕ 1: Проданы ВСЕ 100 билетов - МГНОВЕННЫЙ РОЗЫГРЫШ
                 if sold >= TOTAL_TICKETS and is_active:
                     should_draw = True
-                    reason = "Проданы все 150 билетов"
+                    reason = "Проданы все 100 билетов"
                     if is_timer_active:
                         await db.stop_lottery_timer()
 
-                # УСЛОВИЕ 2: Таймер активен и время истекло (4 дня)
                 elif is_timer_active and timer_end:
                     end_time = datetime.fromisoformat(timer_end) if isinstance(timer_end, str) else timer_end
                     if datetime.now() >= end_time:
@@ -33,7 +31,6 @@ async def check_and_run_lottery(bot):
                         reason = "Истекло 4 дня"
                         await db.stop_lottery_timer()
 
-                # УСЛОВИЕ 3: Продано 60+ и таймер еще не запущен (запускаем)
                 elif sold >= 60 and not is_timer_active and is_active and sold < TOTAL_TICKETS:
                     await db.start_lottery_timer()
                     print(f"✅ ЗАПУЩЕН ТАЙМЕР НА 4 ДНЯ! Продано {sold} билетов")
@@ -44,13 +41,11 @@ async def check_and_run_lottery(bot):
                                 admin_id,
                                 f"⏰ ЗАПУЩЕН ТАЙМЕР НА 4 ДНЯ!\n\n"
                                 f"Продано {sold}/{TOTAL_TICKETS} билетов\n"
-                                f"Розыгрыш состоится через 4 дня! "
-                                f"Успевайте купить оставшиеся билеты!"
+                                f"Розыгрыш состоится через 4 дня!"
                             )
                         except:
                             pass
 
-                # Проводим розыгрыш если нужно
                 if should_draw and is_active:
                     winner = await db.start_lottery_draw()
                     if winner:
