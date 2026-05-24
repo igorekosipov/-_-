@@ -18,7 +18,7 @@ PAYMENT_DETAILS = """
 PRIZE_INFO = {
     "name": "Sony PlayStation 5",
     "description": "Игровая консоль нового поколения",
-    "photo": "https://image.api.playstation.com/vulcan/ap/rnd/202207/1210/4xJ8XB3wf891SUQjerCZWO4y.png"
+    "photo": ""
 }
 
 PRICE_FIRST = 700
