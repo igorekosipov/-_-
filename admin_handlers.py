@@ -166,7 +166,7 @@ async def confirm_payment(callback: CallbackQuery):
                 reason = "Истекло 4 дня"
                 await db.stop_lottery_timer()
 
-        elif sold_count >= 60 and not is_timer_active and is_active and sold_count < TOTAL_TICKETS:
+        elif sold_count >= 70 and not is_timer_active and is_active and sold_count < TOTAL_TICKETS:
             await db.start_lottery_timer()
             for admin_id in ADMIN_IDS:
                 try:
