@@ -114,20 +114,23 @@ async def show_lottery(message: Message):
 
         available = [num for num in range(1, TOTAL_TICKETS + 1) if num not in taken]
         
-        # Получаем количество уже купленных билетов пользователя
         user_ticket_count = await db.get_user_ticket_count(message.from_user.id)
         price = PRICE_FIRST if user_ticket_count == 0 else PRICE_DISCOUNT
         
+        from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+        
         buttons = []
 
-        # Создаем 15 строк по 10 кнопок (150 билетов)
-        for start in range(1, TOTAL_TICKETS + 1, 10):
+        # ПРАВИЛЬНОЕ СОЗДАНИЕ 15 СТРОК ПО 10 КНОПОК (150 билетов)
+        for row in range(15):  # 0-14 = 15 строк
             row_buttons = []
-            for ticket_num in range(start, min(start + 10, TOTAL_TICKETS + 1)):
-                if ticket_num in taken:
-                    row_buttons.append(InlineKeyboardButton(text=f"🔒{ticket_num}", callback_data="sold"))
-                else:
-                    row_buttons.append(InlineKeyboardButton(text=str(ticket_num), callback_data=f"buy_{ticket_num}"))
+            for col in range(1, 11):  # 1-10 = 10 кнопок в строке
+                ticket_num = row * 10 + col  # 1-150
+                if ticket_num <= TOTAL_TICKETS:
+                    if ticket_num in taken:
+                        row_buttons.append(InlineKeyboardButton(text=f"🔒", callback_data="sold"))
+                    else:
+                        row_buttons.append(InlineKeyboardButton(text=str(ticket_num), callback_data=f"buy_{ticket_num}"))
             buttons.append(row_buttons)
         
         buttons.append([
@@ -167,14 +170,13 @@ async def show_lottery(message: Message):
 """
         
         await message.answer(
-    lottery_text,
-    reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons)
-)
+            lottery_text,
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons)
+        )
 
     except Exception as e:
         await message.answer(f"❌ Ошибка: {str(e)}")
         print(f"Ошибка: {e}")
-
 
 @router.callback_query(F.data.startswith("buy_"))
 async def buy_ticket(callback: CallbackQuery, state: FSMContext):
