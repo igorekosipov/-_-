@@ -2,33 +2,58 @@ import aiosqlite
 from aiogram import Router, F
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
-from aiogram.types import Message, CallbackQuery
+from aiogram.types import Message, CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
 from datetime import datetime
 
 import database as db
-from keyboards import main_menu, ticket_selection_keyboard, confirm_payment_keyboard
+from keyboards import main_menu, confirm_payment_keyboard
 from states import PaymentStates
-from config import PRIZE_INFO, PRICE, PAYMENT_DETAILS, TOTAL_TICKETS
+from config import PRIZE_INFO, PRICE_FIRST, PRICE_DISCOUNT, TOTAL_TICKETS
 
 router = Router()
 
 
 @router.message(Command("start"))
 async def cmd_start(message: Message, state: FSMContext):
+    args = message.text.split()
+    referrer_id = None
+    if len(args) > 1 and args[1].startswith("ref_"):
+        try:
+            referrer_id = int(args[1].split("_")[1])
+            if referrer_id == message.from_user.id:
+                referrer_id = None
+        except:
+            pass
+    
     await state.clear()
-    await db.add_user(message.from_user.id, message.from_user.username, message.from_user.full_name)
+    await db.add_user(
+        message.from_user.id, 
+        message.from_user.username, 
+        message.from_user.full_name,
+        referrer_id
+    )
+    
+    if referrer_id and referrer_id != message.from_user.id:
+        await db.add_referral(referrer_id, message.from_user.id)
+    
     await db.cleanup_expired_subscriptions()
-
+    
     welcome_text = """
 🎉 Добро пожаловать в розыгрыш ценных призов!
 
-🎁 Постоянные розыгрыши с реальными призами
-💫 Все максимально честно и прозрачно
-🚚 Доставка в день выйгрыша победителю по городу Бийску или СДЭК по всей России
+🎁 Еженедельные розыгрыши с реальными призами
+💫 Честно и прозрачно
+🚚 Доставка СДЭК по всей России
+
+🎁 АКЦИИ:
+• Первый билет — 700₽
+• Последующие билеты — 600₽
+• Приведи друга → получи бесплатный билет
+• Купи 20 билетов → бесплатный билет
+• Купи 70 билетов → физический приз в подарок!
 
 Используйте меню для навигации
 """
-
     await message.answer(welcome_text, reply_markup=main_menu())
 
 
@@ -43,10 +68,13 @@ async def show_rules(message: Message):
 ✅ Приз высылается в течение 3 дней после розыгрыша
 
 Как участвовать:
-1. Оформите подписку на бота (700₽/10 дней)
+1. Оформите подписку на бота
 2. В подарок вы получаете лотерейный билет
-3. Отсчет по рулетке начинается после купленных 60 билетов (4дня), если все 100 билеты были выкуплены, рулетка начинается сразу
 3. Ждите розыгрыша и забирайте приз!
+
+ЦЕНЫ:
+• Первый билет — 700₽
+• Все последующие билеты — 600₽
 """
     await message.answer(rules, reply_markup=main_menu())
 
@@ -61,7 +89,7 @@ async def how_to_get_prize(message: Message):
 3️⃣ Менеджер уточнит данные для отправки
 4️⃣ Приз отправляется СДЭКом в течение 3 дней
 
-Для связи с менеджером: @IgoroOsipov1
+Для связи с менеджером: @manager_username
 """
     await message.answer(text, reply_markup=main_menu())
 
@@ -84,183 +112,60 @@ async def show_lottery(message: Message):
             taken_rows = await cursor.fetchall()
             taken = set([row[0] for row in taken_rows])
 
-        from config import TOTAL_TICKETS
-        from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
-
-        # ========== ПОЛУЧАЕМ СТАТУС ТАЙМЕРА ==========
-        timer_info = await db.get_lottery_timer()
-        timer_start, timer_end, is_timer_active = timer_info if timer_info else (None, None, False)
-
-        # ФОРМИРУЕМ ТЕКСТ ТАЙМЕРА
-        timer_text = ""
-        time_left_text = ""
-
-        if is_timer_active and timer_end:
-            end_time = datetime.fromisoformat(timer_end) if isinstance(timer_end, str) else timer_end
-            time_left = end_time - datetime.now()
-
-            if time_left.total_seconds() > 0:
-                days = time_left.days
-                hours = time_left.seconds // 3600
-                minutes = (time_left.seconds % 3600) // 60
-                seconds = time_left.seconds % 60
-
-                if days > 0:
-                    time_left_text = f"⏰ {days}д {hours}ч {minutes}мин {seconds}с"
-                elif hours > 0:
-                    time_left_text = f"⏰ {hours}ч {minutes}мин {seconds}с"
-                elif minutes > 0:
-                    time_left_text = f"⏰ {minutes}мин {seconds}с"
-                else:
-                    time_left_text = f"⏰ {seconds}с"
-
-                timer_text = f"\n⏳ ДО РОЗЫГРЫША ОСТАЛОСЬ: {time_left_text}"
-            else:
-                timer_text = "\n🎲 РОЗЫГРЫШ БУДЕТ ПРОВЕДЕН В БЛИЖАЙШЕЕ ВРЕМЯ!"
-        elif sold >= 60 and not is_timer_active and sold < TOTAL_TICKETS:
-            timer_text = "\n⏳ ТАЙМЕР ЗАПУСТИТСЯ ПРИ ДОСТИЖЕНИИ 60 ПРОДАННЫХ БИЛЕТОВ!"
-        elif sold >= TOTAL_TICKETS:
-            timer_text = "\n🎲 ВСЕ БИЛЕТЫ ПРОДАНЫ! РОЗЫГРЫШ СОСТОИТСЯ СЕЙЧАС!"
-
-        # СОЗДАЕМ КНОПКИ (8x8 + 4)
+        available = [num for num in range(1, TOTAL_TICKETS + 1) if num not in taken]
+        
+        # Получаем количество уже купленных билетов пользователя
+        user_ticket_count = await db.get_user_ticket_count(message.from_user.id)
+        price = PRICE_FIRST if user_ticket_count == 0 else PRICE_DISCOUNT
+        
         buttons = []
 
-        # 1-8
-        row1 = []
-        for i in range(1, 9):
-            if i in taken:
-                row1.append(InlineKeyboardButton(text=f"🔒{i}", callback_data="sold"))
-            else:
-                row1.append(InlineKeyboardButton(text=str(i), callback_data=f"buy_{i}"))
-        buttons.append(row1)
-
-        # 9-16
-        row2 = []
-        for i in range(9, 17):
-            if i in taken:
-                row2.append(InlineKeyboardButton(text=f"🔒{i}", callback_data="sold"))
-            else:
-                row2.append(InlineKeyboardButton(text=str(i), callback_data=f"buy_{i}"))
-        buttons.append(row2)
-
-        # 17-24
-        row3 = []
-        for i in range(17, 25):
-            if i in taken:
-                row3.append(InlineKeyboardButton(text=f"🔒{i}", callback_data="sold"))
-            else:
-                row3.append(InlineKeyboardButton(text=str(i), callback_data=f"buy_{i}"))
-        buttons.append(row3)
-
-        # 25-32
-        row4 = []
-        for i in range(25, 33):
-            if i in taken:
-                row4.append(InlineKeyboardButton(text=f"🔒{i}", callback_data="sold"))
-            else:
-                row4.append(InlineKeyboardButton(text=str(i), callback_data=f"buy_{i}"))
-        buttons.append(row4)
-
-        # 33-40
-        row5 = []
-        for i in range(33, 41):
-            if i in taken:
-                row5.append(InlineKeyboardButton(text=f"🔒{i}", callback_data="sold"))
-            else:
-                row5.append(InlineKeyboardButton(text=str(i), callback_data=f"buy_{i}"))
-        buttons.append(row5)
-
-        # 41-48
-        row6 = []
-        for i in range(41, 49):
-            if i in taken:
-                row6.append(InlineKeyboardButton(text=f"🔒{i}", callback_data="sold"))
-            else:
-                row6.append(InlineKeyboardButton(text=str(i), callback_data=f"buy_{i}"))
-        buttons.append(row6)
-
-        # 49-56
-        row7 = []
-        for i in range(49, 57):
-            if i in taken:
-                row7.append(InlineKeyboardButton(text=f"🔒{i}", callback_data="sold"))
-            else:
-                row7.append(InlineKeyboardButton(text=str(i), callback_data=f"buy_{i}"))
-        buttons.append(row7)
-
-        # 57-64
-        row8 = []
-        for i in range(57, 65):
-            if i in taken:
-                row8.append(InlineKeyboardButton(text=f"🔒{i}", callback_data="sold"))
-            else:
-                row8.append(InlineKeyboardButton(text=str(i), callback_data=f"buy_{i}"))
-        buttons.append(row8)
-
-        # 65-72
-        row9 = []
-        for i in range(65, 73):
-            if i in taken:
-                row9.append(InlineKeyboardButton(text=f"🔒{i}", callback_data="sold"))
-            else:
-                row9.append(InlineKeyboardButton(text=str(i), callback_data=f"buy_{i}"))
-        buttons.append(row9)
-
-        # 73-80
-        row10 = []
-        for i in range(73, 81):
-            if i in taken:
-                row10.append(InlineKeyboardButton(text=f"🔒{i}", callback_data="sold"))
-            else:
-                row10.append(InlineKeyboardButton(text=str(i), callback_data=f"buy_{i}"))
-        buttons.append(row10)
-
-        # 81-88
-        row11 = []
-        for i in range(81, 89):
-            if i in taken:
-                row11.append(InlineKeyboardButton(text=f"🔒{i}", callback_data="sold"))
-            else:
-                row11.append(InlineKeyboardButton(text=str(i), callback_data=f"buy_{i}"))
-        buttons.append(row11)
-
-        # 89-96
-        row12 = []
-        for i in range(89, 97):
-            if i in taken:
-                row12.append(InlineKeyboardButton(text=f"🔒{i}", callback_data="sold"))
-            else:
-                row12.append(InlineKeyboardButton(text=str(i), callback_data=f"buy_{i}"))
-        buttons.append(row12)
-
-        # 97-100
-        row13 = []
-        for i in range(97, 101):
-            if i in taken:
-                row13.append(InlineKeyboardButton(text=f"🔒{i}", callback_data="sold"))
-            else:
-                row13.append(InlineKeyboardButton(text=str(i), callback_data=f"buy_{i}"))
-        buttons.append(row13)
-
-        # Кнопки управления
+        # Создаем 15 строк по 10 кнопок (150 билетов)
+        for start in range(1, TOTAL_TICKETS + 1, 10):
+            row_buttons = []
+            for ticket_num in range(start, min(start + 10, TOTAL_TICKETS + 1)):
+                if ticket_num in taken:
+                    row_buttons.append(InlineKeyboardButton(text=f"🔒{ticket_num}", callback_data="sold"))
+                else:
+                    row_buttons.append(InlineKeyboardButton(text=str(ticket_num), callback_data=f"buy_{ticket_num}"))
+            buttons.append(row_buttons)
+        
         buttons.append([
             InlineKeyboardButton(text="🔄 Обновить", callback_data="refresh"),
             InlineKeyboardButton(text="❌ Отмена", callback_data="cancel")
         ])
-
+        
+        timer_info = await db.get_lottery_timer()
+        timer_start, timer_end, is_timer_active = timer_info if timer_info else (None, None, False)
+        
+        timer_text = ""
+        if is_timer_active and timer_end:
+            end_time = datetime.fromisoformat(timer_end) if isinstance(timer_end, str) else timer_end
+            time_left = end_time - datetime.now()
+            days = time_left.days
+            hours = time_left.seconds // 3600
+            minutes = (time_left.seconds % 3600) // 60
+            if days > 0:
+                timer_text = f"⏰ ДО РОЗЫГРЫША: {days}д {hours}ч {minutes}мин"
+            else:
+                timer_text = f"⏰ ДО РОЗЫГРЫША: {hours}ч {minutes}мин"
+        
         lottery_text = f"""
 🎰 АКТУАЛЬНЫЙ РОЗЫГРЫШ
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🏆 ПРИЗ: {PRIZE_INFO['name']}
 📝 ОПИСАНИЕ: {PRIZE_INFO['description']}
-💰 СТОИМОСТЬ: {PRICE}₽
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🎫 ПРОДАНО: {sold}/{TOTAL_TICKETS}
-✨ ДОСТУПНО: {TOTAL_TICKETS - sold}{timer_text}
+✨ ДОСТУПНО: {len(available)}
+💰 ЦЕНА БИЛЕТА: {price}₽
+{timer_text}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-👇 ВЫБЕРИТЕ НОМЕР БИЛЕТА (1-100):
+📌 Ваш баланс билетов: {user_ticket_count}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+👇 ВЫБЕРИТЕ НОМЕР БИЛЕТА (1-150):
 """
-
+        
         await message.answer_photo(
             photo=PRIZE_INFO["photo"],
             caption=lottery_text,
@@ -271,12 +176,6 @@ async def show_lottery(message: Message):
         await message.answer(f"❌ Ошибка: {str(e)}")
         print(f"Ошибка: {e}")
 
-        @router.callback_query(F.data == "refresh")
-        async def refresh_lottery(callback: CallbackQuery):
-            """Обновить список билетов и таймер"""
-            await callback.message.delete()
-            await show_lottery(callback.message)
-            await callback.answer()
 
 @router.callback_query(F.data.startswith("buy_"))
 async def buy_ticket(callback: CallbackQuery, state: FSMContext):
@@ -292,17 +191,20 @@ async def buy_ticket(callback: CallbackQuery, state: FSMContext):
                 await callback.answer("❌ Этот билет уже куплен!", show_alert=True)
                 return
 
-        await state.update_data(ticket_number=ticket_num)
+        user_ticket_count = await db.get_user_ticket_count(callback.from_user.id)
+        price = PRICE_FIRST if user_ticket_count == 0 else PRICE_DISCOUNT
+        
+        await state.update_data(ticket_number=ticket_num, price=price)
 
         payment_text = f"""
 💳 ОФОРМЛЕНИЕ ПОДПИСКИ
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Вы выбрали билет №{ticket_num}
 
-Стоимость подписки на 10 дней: {PRICE}₽
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 {PAYMENT_DETAILS}
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+💰 СУММА К ОПЛАТЕ: {price}₽
+
 ⚠️ ВАЖНО: После оплаты отправьте чек в этот чат.
 """
 
@@ -322,11 +224,24 @@ async def cancel_purchase(callback: CallbackQuery):
     await callback.answer()
 
 
+@router.callback_query(F.data == "refresh")
+async def refresh_lottery(callback: CallbackQuery):
+    await callback.message.delete()
+    await show_lottery(callback.message)
+    await callback.answer()
+
+
+@router.callback_query(F.data == "sold")
+async def sold_ticket(callback: CallbackQuery):
+    await callback.answer("❌ Этот билет уже продан!", show_alert=True)
+
+
 @router.message(PaymentStates.waiting_for_receipt, F.photo)
 async def handle_receipt(message: Message, state: FSMContext):
     try:
         data = await state.get_data()
         ticket_num = data.get("ticket_number")
+        price = data.get("price", PRICE_FIRST)
 
         if not ticket_num:
             await message.answer("❌ Ошибка: начните заново", reply_markup=main_menu())
@@ -336,7 +251,7 @@ async def handle_receipt(message: Message, state: FSMContext):
         photo = message.photo[-1]
         file_id = photo.file_id
 
-        await db.add_subscription(message.from_user.id, ticket_num, file_id)
+        await db.add_subscription(message.from_user.id, ticket_num, file_id, price)
 
         async with aiosqlite.connect(db.DATABASE_PATH) as conn:
             cursor = await conn.execute(
@@ -352,7 +267,7 @@ async def handle_receipt(message: Message, state: FSMContext):
 👤 Пользователь: @{message.from_user.username or message.from_user.full_name}
 🆔 ID: {message.from_user.id}
 🎫 Билет №{ticket_num}
-💰 Сумма: {PRICE}₽
+💰 Сумма: {price}₽
 🕐 Время: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 """
 
@@ -389,19 +304,25 @@ async def invalid_receipt(message: Message):
 async def show_my_tickets(message: Message):
     try:
         tickets = await db.get_user_tickets(message.from_user.id)
+        ticket_count = await db.get_user_ticket_count(message.from_user.id)
 
         if not tickets:
             await message.answer(
-                "📭 У вас пока нет активных билетов.\nКупите подписку в разделе 'Розыгрыш'!",
+                "📭 У вас пока нет активных билетов.\n\n"
+                f"💰 Всего куплено билетов за всё время: {ticket_count}\n"
+                f"🎯 До следующей акции: {20 - ticket_count if ticket_count < 20 else 0} билетов до бесплатного билета\n"
+                f"🏆 До физического приза: {70 - ticket_count if ticket_count < 70 else 0} билетов",
                 reply_markup=main_menu()
             )
             return
 
-        text = "🎫 ВАШИ АКТИВНЫЕ БИЛЕТЫ:\n━━━━━━━━━━━━━━━━━\n"
+        text = f"🎫 ВАШИ АКТИВНЫЕ БИЛЕТЫ:\n━━━━━━━━━━━━━━━━━\n"
         for ticket_num, purchase_date, confirmed in tickets:
             if confirmed:
                 date_str = datetime.fromisoformat(purchase_date).strftime('%d.%m.%Y')
                 text += f"🔸 Билет №{ticket_num} (куплен {date_str})\n"
+        
+        text += f"\n📊 ВСЕГО КУПЛЕНО: {ticket_count} билетов"
 
         await message.answer(text, reply_markup=main_menu())
 
@@ -413,35 +334,99 @@ async def show_my_tickets(message: Message):
 async def last_draw_winner(message: Message):
     try:
         winner = await db.get_last_winner()
-
+        
         if winner:
             winner_id, winner_ticket, draw_date = winner
             date_str = datetime.fromisoformat(draw_date).strftime('%d.%m.%Y %H:%M')
-
-            # Пытаемся получить username победителя
-            try:
-                user = await message.bot.get_chat(winner_id)
-                username = f"@{user.username}" if user.username else f"ID: {winner_id}"
-            except:
-                username = f"ID: {winner_id}"
-
+            
             await message.answer(
                 f"🏆 ПОСЛЕДНИЙ РОЗЫГРЫШ\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
                 f"🎲 ВЫИГРЫШНЫЙ БИЛЕТ: №{winner_ticket}\n"
-                f"👤 ПОБЕДИТЕЛЬ: {username}\n"
                 f"📅 ДАТА: {date_str}\n"
-                f"🎁 ПРИЗ: {PRIZE_INFO['name']}\n\n"
-                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+                f"🎁 ПРИЗ: {PRIZE_INFO['name']}",
                 reply_markup=main_menu()
             )
         else:
             await message.answer(
-                "📭 Пока не было проведено ни одного розыгрыша.\n\n"
-                "Первый розыгрыш состоится когда:\n"
-                "• Будет продано 60+ билетов и\n"
-                "• Пройдёт обратный отсчет 4 дня или\n"
-                "• Будут проданы все 100 билетов",
+                "📭 Пока не было проведено ни одного розыгрыша.",
                 reply_markup=main_menu()
             )
     except Exception as e:
         await message.answer(f"❌ Ошибка: {str(e)}")
+
+
+# ========== КНОПКА АКЦИИ ==========
+
+@router.message(F.text == "🎁 Акции")
+async def show_promotions(message: Message):
+    ticket_count = await db.get_user_ticket_count(message.from_user.id)
+    
+    text = f"""
+🎁 АКТУАЛЬНЫЕ АКЦИИ 🎁
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1️⃣ ПЕРВЫЙ БИЛЕТ СО СКИДКОЙ
+• Первый билет — 700₽
+• Последующие билеты — 600₽
+
+2️⃣ ПРИВЕДИ ДРУГА
+• Приведи друга, который купит билет
+• Ты получишь БЕСПЛАТНЫЙ билет на выбор
+• Друг получит скидку 600₽ на билет
+
+3️⃣ ЗА 20 КУПЛЕННЫХ БИЛЕТОВ
+• Бесплатный билет на следующий розыгрыш
+• Ваш прогресс: {ticket_count}/20
+
+4️⃣ ЗА 70 КУПЛЕННЫХ БИЛЕТОВ
+• Бесплатный физический приз (рандомный)
+• Ваш прогресс: {ticket_count}/70
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+💫 Активируйте акции, участвуя в розыгрышах!
+"""
+    await message.answer(text, reply_markup=main_menu())
+
+
+# ========== КНОПКА РЕФЕРАЛЬНАЯ ССЫЛКА ==========
+
+@router.message(F.text == "👥 Реферальная ссылка")
+async def show_referral(message: Message):
+    user_id = message.from_user.id
+    bot_username = (await message.bot.get_me()).username
+    
+    referral_link = f"https://t.me/{bot_username}?start=ref_{user_id}"
+    
+    referrals_count = await db.get_referrals_count(user_id)
+    referrals_list = await db.get_referral_list(user_id)
+    
+    text = f"""
+👥 РЕФЕРАЛЬНАЯ ПРОГРАММА 👥
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🔗 ВАША РЕФЕРАЛЬНАЯ ССЫЛКА:
+`{referral_link}`
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📊 СТАТИСТИКА:
+• Приглашено друзей: {len(referrals_list)}
+• Из них купили билет: {referrals_count}
+
+🎁 ВОЗНАГРАЖДЕНИЕ:
+За каждого друга, который купит билет:
+• ВЫ получаете БЕСПЛАТНЫЙ билет
+• ДРУГ получает скидку 600₽ на билет
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+👥 ПРИГЛАШЕННЫЕ ДРУЗЬЯ:
+"""
+    
+    if referrals_list:
+        for ref_id, username, bought, date in referrals_list[-5:]:  # последние 5
+            status = "✅ купил" if bought else "⏳ ожидает"
+            username_str = f"@{username}" if username else f"ID:{ref_id}"
+            text += f"\n• {username_str} — {status}"
+    else:
+        text += "\nПока нет приглашенных друзей"
+    
+    await message.answer(text, parse_mode="Markdown", reply_markup=main_menu())
