@@ -31,7 +31,7 @@ async def check_and_run_lottery(bot):
                         reason = "Истекло 4 дня"
                         await db.stop_lottery_timer()
 
-                elif sold >= 60 and not is_timer_active and is_active and sold < TOTAL_TICKETS:
+                elif sold >= 70 and not is_timer_active and is_active and sold < TOTAL_TICKETS:
                     await db.start_lottery_timer()
                     print(f"✅ ЗАПУЩЕН ТАЙМЕР НА 4 ДНЯ! Продано {sold} билетов")
 
