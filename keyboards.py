@@ -36,3 +36,4 @@ def confirm_payment_keyboard(subscription_id):
         [InlineKeyboardButton(text="❌ ОТКАЗАТЬ", callback_data=f"reject_{subscription_id}")]
     ])
     return keyboard
+    
