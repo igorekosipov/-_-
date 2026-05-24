@@ -8,17 +8,19 @@ ADMIN_IDS = list(map(int, os.getenv("ADMIN_IDS", "").split(",")))
 
 PAYMENT_DETAILS = """
 🏦 РЕКВИЗИТЫ ДЛЯ ОПЛАТЫ:
-Т-Банк: 2200 7004 3556 8828
-Получатель: NATALIYA O.
-Сумма: 700 рублей
+Сбербанк: 1234 5678 9012 3456
+Получатель: Иванов Иван Иванович
+Сумма: 700 рублей (первый билет)
+Сумма со скидкой: 600 рублей (последующие билеты)
 Назначение: Подписка на бота 10 дней
 """
 
 PRIZE_INFO = {
     "name": "Sony PlayStation 5",
-    "description": "Игровая консоль",
-    "photo": "https://playboom.ru/upload/iblock/164/yl282l57qbi7kj9zoxnubssu4osvewpi/1.webp"
+    "description": "Игровая консоль нового поколения",
+    "photo": "https://image.api.playstation.com/vulcan/ap/rnd/202207/1210/4xJ8XB3wf891SUQjerCZWO4y.png"
 }
 
-PRICE = 700
-TOTAL_TICKETS = 100
+PRICE_FIRST = 700
+PRICE_DISCOUNT = 600
+TOTAL_TICKETS = 150
