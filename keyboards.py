@@ -6,7 +6,7 @@ def main_menu():
     keyboard = ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text="🎁 Розыгрыш")],
-            [KeyboardButton(text="📋 Правила"), KeyboardButton(text="🎫 Твои билеты")],
+            [KeyboardButton(text="📋 Правила"), KeyboardButton(text="🎫 Твои билеты")],  # ← ИЗМЕНЕНО
             [KeyboardButton(text="🏆 Последний билет"), KeyboardButton(text="📦 Как получить приз")],
             [KeyboardButton(text="🎁 Акции"), KeyboardButton(text="👥 Реферальная ссылка")]
         ],
