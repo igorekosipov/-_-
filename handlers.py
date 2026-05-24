@@ -117,18 +117,16 @@ async def show_lottery(message: Message):
         user_ticket_count = await db.get_user_ticket_count(message.from_user.id)
         price = PRICE_FIRST if user_ticket_count == 0 else PRICE_DISCOUNT
         
-        from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
-        
         buttons = []
 
-        # ПРАВИЛЬНОЕ СОЗДАНИЕ 15 СТРОК ПО 10 КНОПОК (150 билетов)
-        for row in range(15):  # 0-14 = 15 строк
+        # 15 СТРОК ПО 10 КНОПОК = 150 БИЛЕТОВ
+        for row in range(15):  # 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14
             row_buttons = []
-            for col in range(1, 11):  # 1-10 = 10 кнопок в строке
-                ticket_num = row * 10 + col  # 1-150
+            for col in range(1, 11):  # 1,2,3,4,5,6,7,8,9,10
+                ticket_num = row * 10 + col
                 if ticket_num <= TOTAL_TICKETS:
                     if ticket_num in taken:
-                        row_buttons.append(InlineKeyboardButton(text=f"🔒", callback_data="sold"))
+                        row_buttons.append(InlineKeyboardButton(text="🔒", callback_data="sold"))
                     else:
                         row_buttons.append(InlineKeyboardButton(text=str(ticket_num), callback_data=f"buy_{ticket_num}"))
             buttons.append(row_buttons)
@@ -149,9 +147,9 @@ async def show_lottery(message: Message):
             hours = time_left.seconds // 3600
             minutes = (time_left.seconds % 3600) // 60
             if days > 0:
-                timer_text = f"⏰ ДО РОЗЫГРЫША: {days}д {hours}ч {minutes}мин"
+                timer_text = f"\n⏰ ДО РОЗЫГРЫША: {days}д {hours}ч {minutes}мин"
             else:
-                timer_text = f"⏰ ДО РОЗЫГРЫША: {hours}ч {minutes}мин"
+                timer_text = f"\n⏰ ДО РОЗЫГРЫША: {hours}ч {minutes}мин"
         
         lottery_text = f"""
 🎰 АКТУАЛЬНЫЙ РОЗЫГРЫШ
@@ -161,8 +159,7 @@ async def show_lottery(message: Message):
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🎫 ПРОДАНО: {sold}/{TOTAL_TICKETS}
 ✨ ДОСТУПНО: {len(available)}
-💰 ЦЕНА БИЛЕТА: {price}₽
-{timer_text}
+💰 ЦЕНА БИЛЕТА: {price}₽{timer_text}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📌 Ваш баланс билетов: {user_ticket_count}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -177,6 +174,7 @@ async def show_lottery(message: Message):
     except Exception as e:
         await message.answer(f"❌ Ошибка: {str(e)}")
         print(f"Ошибка: {e}")
+
 
 @router.callback_query(F.data.startswith("buy_"))
 async def buy_ticket(callback: CallbackQuery, state: FSMContext):
@@ -202,9 +200,11 @@ async def buy_ticket(callback: CallbackQuery, state: FSMContext):
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Вы выбрали билет №{ticket_num}
 
-{PAYMENT_DETAILS}
-
-💰 СУММА К ОПЛАТЕ: {price}₽
+🏦 РЕКВИЗИТЫ ДЛЯ ОПЛАТЫ:
+Сбербанк: 1234 5678 9012 3456
+Получатель: Иванов Иван Иванович
+Сумма: {price} рублей
+Назначение: Подписка на бота 10 дней
 
 ⚠️ ВАЖНО: После оплаты отправьте чек в этот чат.
 """
@@ -356,8 +356,6 @@ async def last_draw_winner(message: Message):
         await message.answer(f"❌ Ошибка: {str(e)}")
 
 
-# ========== КНОПКА АКЦИИ ==========
-
 @router.message(F.text == "🎁 Акции")
 async def show_promotions(message: Message):
     ticket_count = await db.get_user_ticket_count(message.from_user.id)
@@ -388,8 +386,6 @@ async def show_promotions(message: Message):
 """
     await message.answer(text, reply_markup=main_menu())
 
-
-# ========== КНОПКА РЕФЕРАЛЬНАЯ ССЫЛКА ==========
 
 @router.message(F.text == "👥 Реферальная ссылка")
 async def show_referral(message: Message):
@@ -423,7 +419,7 @@ async def show_referral(message: Message):
 """
     
     if referrals_list:
-        for ref_id, username, bought, date in referrals_list[-5:]:  # последние 5
+        for ref_id, username, bought, date in referrals_list[-5:]:
             status = "✅ купил" if bought else "⏳ ожидает"
             username_str = f"@{username}" if username else f"ID:{ref_id}"
             text += f"\n• {username_str} — {status}"
