@@ -312,12 +312,15 @@ async def get_lottery_timer():
 
 
 async def start_lottery_timer():
+    """Запустить таймер на 4 дня"""
     timer_start = datetime.now()
     timer_end = timer_start + timedelta(days=4)
     async with aiosqlite.connect(DATABASE_PATH) as db:
         await db.execute("""
             UPDATE current_lottery SET 
-                timer_start = ?, timer_end = ?, is_timer_active = 1
+                timer_start = ?, 
+                timer_end = ?, 
+                is_timer_active = 1
             WHERE id = 1
         """, (timer_start, timer_end))
         await db.commit()
