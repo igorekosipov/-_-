@@ -182,12 +182,10 @@ async def show_lottery(message: Message):
 💰 ЦЕНА БИЛЕТА: {price}₽
 {timer_text}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📌 Ваш баланс билетов: {user_ticket_count}
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 👇 ВЫБЕРИТЕ НОМЕР БИЛЕТА (1-100):
 """
 
-        # ========== ОТПРАВКА С ФОТО ==========
+        # Отправляем с фото если есть
         if PRIZE_INFO.get("photo") and PRIZE_INFO["photo"]:
             try:
                 await message.answer_photo(
@@ -211,6 +209,8 @@ async def show_lottery(message: Message):
     except Exception as e:
         await message.answer(f"❌ Ошибка: {str(e)}")
         print(f"Ошибка: {e}")
+
+
 @router.callback_query(F.data.startswith("buy_"))
 async def buy_ticket(callback: CallbackQuery, state: FSMContext):
     try:
