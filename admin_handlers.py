@@ -357,7 +357,7 @@ async def show_stats(message: Message):
 💰 СОБРАНО СРЕДСТВ: {total_revenue}₽
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🎁 ЦЕНЫ:
-• Первый билет: {PRICE_FIRST}₽
+• Первая подписка + билет: {PRICE_FIRST}₽
 • Последующие: {PRICE_DISCOUNT}₽
 • Для приведенных друзей (первый): 500₽
 """
