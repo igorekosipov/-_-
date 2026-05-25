@@ -11,10 +11,6 @@ from config import ADMIN_IDS, PRIZE_INFO, PRICE_FIRST, PRICE_DISCOUNT, TOTAL_TIC
 router = Router()
 
 
-    
-    await db.start_lottery_timer()
-    await message.answer("✅ Таймер запущен на 4 дня (или на время из database.py)!")
-
 
 def is_admin(user_id: int) -> bool:
     return user_id in ADMIN_IDS
