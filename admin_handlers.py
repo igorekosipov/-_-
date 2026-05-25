@@ -10,10 +10,7 @@ from config import ADMIN_IDS, PRIZE_INFO, PRICE_FIRST, PRICE_DISCOUNT, TOTAL_TIC
 
 router = Router()
 
-@router.message(F.text == "⏰ Тест таймера")
-async def test_timer(message: Message):
-    if not is_admin(message.from_user.id):
-        return
+
     
     await db.start_lottery_timer()
     await message.answer("✅ Таймер запущен на 4 дня (или на время из database.py)!")
