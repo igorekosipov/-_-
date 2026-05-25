@@ -179,7 +179,7 @@ async def show_lottery(message: Message):
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🎫 ПРОДАНО: {sold}/{TOTAL_TICKETS}
 ✨ ДОСТУПНО: {TOTAL_TICKETS - sold}
-💰 ЦЕНА БИЛЕТА: {price}₽
+💰 ЦЕНА ПОДПИСКИ + БИЛЕТ: {price}₽
 {timer_text}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 👇 ВЫБЕРИТЕ НОМЕР БИЛЕТА (1-100):
