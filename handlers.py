@@ -345,27 +345,27 @@ async def invalid_receipt(message: Message):
     )
 
 
-@router.message(F.text == "🎫 Твои билеты")  # ← ИЗМЕНЕНО
+@router.message(F.text == "🎫 Твои билеты")
 async def show_my_tickets(message: Message):
     try:
         tickets = await db.get_user_tickets(message.from_user.id)
-        ticket_count = await db.get_user_ticket_count(message.from_user.id)
 
-        if not tickets:
+        # Фильтруем только подтвержденные билеты
+        confirmed_tickets = [t for t in tickets if t[2] == 1]
+
+        if not confirmed_tickets:
             await message.answer(
                 "📭 У вас пока нет активных билетов.\n\n"
-                f"💰 Всего куплено билетов за всё время: {ticket_count}",
+                "Купите билет в разделе 'Розыгрыш'!",
                 reply_markup=main_menu()
             )
             return
 
-        text = f"🎫 ТВОИ БИЛЕТЫ:\n━━━━━━━━━━━━━━━━━\n"
-        for ticket_num, purchase_date, confirmed in tickets:
+        text = "🎫 ТВОИ БИЛЕТЫ:\n━━━━━━━━━━━━━━━━━\n"
+        for ticket_num, purchase_date, confirmed in confirmed_tickets:
             if confirmed:
                 date_str = datetime.fromisoformat(purchase_date).strftime('%d.%m.%Y')
                 text += f"🔸 Билет №{ticket_num} (куплен {date_str})\n"
-
-        text += f"\n📊 ВСЕГО КУПЛЕНО: {ticket_count} билетов"
 
         await message.answer(text, reply_markup=main_menu())
 
