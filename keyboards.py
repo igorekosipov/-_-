@@ -15,13 +15,13 @@ def main_menu():
     return keyboard
 
 def admin_menu():
-    """Меню администратора"""
     keyboard = ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text="📋 Ожидают оплаты")],
             [KeyboardButton(text="🎲 Запустить розыгрыш")],
             [KeyboardButton(text="📊 Статистика")],
-            [KeyboardButton(text="🗑 Сбросить все билеты")]
+            [KeyboardButton(text="🗑 Сбросить все билеты")],
+            [KeyboardButton(text="⏰ Тест таймера")]  # ← ВРЕМЕННАЯ КНОПКА
         ],
         resize_keyboard=True
     )
