@@ -225,17 +225,25 @@ async def buy_ticket(callback: CallbackQuery, state: FSMContext):
                 await callback.answer("❌ Этот билет уже куплен!", show_alert=True)
                 return
 
+        # Получаем количество УЖЕ ПОДТВЕРЖДЕННЫХ билетов пользователя
+        async with aiosqlite.connect(db.DATABASE_PATH) as conn:
+            cursor = await conn.execute("""
+                SELECT COUNT(*) FROM subscriptions 
+                WHERE user_id = ? AND payment_confirmed = 1 AND expires_at > ?
+            """, (callback.from_user.id, datetime.now()))
+            confirmed_count = (await cursor.fetchone())[0]
+        
         # Проверяем, пришел ли пользователь по реферальной ссылке
         async with aiosqlite.connect(db.DATABASE_PATH) as conn:
             cursor = await conn.execute("SELECT referrer_id FROM users WHERE user_id = ?", (callback.from_user.id,))
             referrer_data = await cursor.fetchone()
             
-            # Если есть реферер и это первая покупка пользователя
-            user_ticket_count = await db.get_user_ticket_count(callback.from_user.id)
-            if referrer_data and referrer_data[0] and user_ticket_count == 0:
+            # Если есть реферер и это первая покупка пользователя (еще ни одного подтвержденного билета)
+            if referrer_data and referrer_data[0] and confirmed_count == 0:
                 price = 500  # Специальная цена для приведенных друзей
             else:
-                price = PRICE_FIRST if user_ticket_count == 0 else PRICE_DISCOUNT
+                # Если уже есть подтвержденные билеты - цена со скидкой
+                price = PRICE_DISCOUNT if confirmed_count > 0 else PRICE_FIRST
 
         await state.update_data(ticket_number=ticket_num, price=price)
 
