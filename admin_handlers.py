@@ -12,6 +12,26 @@ router = Router()
 
 
 
+
+
+@router.message(Command("test_admin"))
+async def test_admin(message: Message):
+    from config import ADMIN_IDS
+    await message.answer(f"ADMIN_IDS = {ADMIN_IDS}")
+    
+    for admin_id in ADMIN_IDS:
+        try:
+            await message.bot.send_message(admin_id, "✅ Тестовое сообщение админу")
+            await message.answer(f"✅ Сообщение отправлено админу {admin_id}")
+        except Exception as e:
+            await message.answer(f"❌ Ошибка при отправке админу {admin_id}: {e}")
+
+
+
+
+
+
+
 def is_admin(user_id: int) -> bool:
     return user_id in ADMIN_IDS
 
