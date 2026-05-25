@@ -21,7 +21,7 @@ def admin_menu():
             [KeyboardButton(text="🎲 Запустить розыгрыш")],
             [KeyboardButton(text="📊 Статистика")],
             [KeyboardButton(text="🗑 Сбросить все билеты")],
-            [KeyboardButton(text="⏰ Тест таймера")]  # ← ВРЕМЕННАЯ КНОПКА
+            
         ],
         resize_keyboard=True
     )
