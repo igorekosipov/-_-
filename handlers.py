@@ -422,36 +422,35 @@ async def show_referral(message: Message, state: FSMContext):
     user_id = message.from_user.id
     bot_username = (await message.bot.get_me()).username
     referral_link = f"https://t.me/{bot_username}?start=ref_{user_id}"
+
     referrals_count = await db.get_referrals_count(user_id)
     referrals_list = await db.get_referral_list(user_id)
+
     text = f"""
-👥 РЕФЕРАЛЬНАЯ ПРОГРАММА 👥
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+👥 **РЕФЕРАЛЬНАЯ ПРОГРАММА**
 
-🔗 ВАША РЕФЕРАЛЬНАЯ ССЫЛКА:
-`{referral_link}`
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📊 СТАТИСТИКА:
-• Приглашено друзей: {len(referrals_list)}
+📊 **СТАТИСТИКА:**  
+• Приглашено друзей: {len(referrals_list)}  
 • Из них купили билет: {referrals_count}
 
-🎁 ВОЗНАГРАЖДЕНИЕ:
-За каждых 5 друзей, которые купят билеты:
-• ВЫ получаете БЕСПЛАТНЫЙ билет!
-• ДРУЗЬЯ получают первый билет за 500₽
+🎁 **ВОЗНАГРАЖДЕНИЕ:**  
+За каждых 5 друзей, которые купят билеты:  
+• ВЫ получаете **БЕСПЛАТНЫЙ** билет!  
+• ДРУЗЬЯ получают первый билет за **500₽**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-👥 ПРИГЛАШЕННЫЕ ДРУЗЬЯ:
+👥 **ПРИГЛАШЁННЫЕ ДРУЗЬЯ:**  
+{chr(10).join([f"• {u}" for u in referrals_list]) if referrals_list else "Пока нет"}
 """
-    if referrals_list:
-        for ref_id, username, bought, date in referrals_list[-5:]:
-            status = "✅ купил" if bought else "⏳ ожидает"
-            username_str = f"@{username}" if username else f"ID:{ref_id}"
-            text += f"\n• {username_str} — {status}"
-    else:
-        text += "\nПока нет приглашенных друзей"
-    await message.answer(text, parse_mode="Markdown", reply_markup=main_menu())
+    # Отправляем текст с кнопкой
+    await message.answer(
+        text,
+        parse_mode="Markdown",
+        reply_markup=referral_copy_keyboard(referral_link)
+    )
+
+    # Также можно показать саму ссылку в отдельном сообщении (если нужно)
+    # await message.answer(f"Ваша ссылка: `{referral_link}`", parse_mode="Markdown")
+
 
 
 # ========== ПОЛУЧИТЬ БОНУС ==========
