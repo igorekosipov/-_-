@@ -469,7 +469,10 @@ async def show_referral(message: Message):
 👥 ПРИГЛАШЕННЫЕ ДРУЗЬЯ:
 """
 
-    @router.message(F.text == "🎁 Получить бонус")
+
+
+
+@router.message(F.text == "🎁 Получить бонус")
 async def get_bonus(message: Message):
     text = """
 🎁 *Ты можешь получить 50 монет в нашем боте "Прозрачный Генератор"!*
@@ -491,14 +494,11 @@ async def get_bonus(message: Message):
 [👉 ПЕРЕЙТИ В БОТА 👈](https://t.me/Osipov_ii_bot)
 """
     await message.answer(text, parse_mode="Markdown", disable_web_page_preview=True)
-
     
 
     
-    await message.answer(text, parse_mode="Markdown", disable_web_page_preview=True)
 
     
-    await message.answer(text, parse_mode="Markdown", disable_web_page_preview=True)
 
     if referrals_list:
         for ref_id, username, bought, date in referrals_list[-5:]:
