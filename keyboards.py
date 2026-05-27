@@ -40,9 +40,4 @@ def confirm_payment_keyboard(subscription_id):
 
 
 
-def referral_copy_keyboard(referral_link: str):
-    from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📋 Скопировать ссылку", callback_data=f"copy_{referral_link}")]
-    ])
-    return keyboard
+
