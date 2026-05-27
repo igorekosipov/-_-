@@ -1,6 +1,13 @@
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 
 
+def referral_copy_keyboard(referral_link: str):
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📋 Скопировать ссылку", callback_data=f"copy_{referral_link}")]
+    ])
+    return keyboard
+
+
 def main_menu():
     """Главное меню"""
     keyboard = ReplyKeyboardMarkup(
