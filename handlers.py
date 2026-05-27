@@ -497,7 +497,14 @@ async def get_bonus(message: Message):
     
 
     
+@router.message(Command("cancel"))
+async def cancel_all(message: Message, state: FSMContext):
+    await state.clear()
+    await message.answer("✅ Действие отменено. Меню сброшено.", reply_markup=main_menu())
 
+
+
+    
     
 
     if referrals_list:
