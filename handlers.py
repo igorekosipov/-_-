@@ -436,8 +436,12 @@ async def show_referral(message: Message, state: FSMContext):
     referrals_count = await db.get_referrals_count(user_id)
     referrals_list = await db.get_referral_list(user_id)
 
+    # Формируем текст (ссылка будет кликабельной в Markdown)
     text = f"""
 👥 **РЕФЕРАЛЬНАЯ ПРОГРАММА**
+
+🔗 **ВАША ССЫЛКА:**  
+`{referral_link}`
 
 📊 **СТАТИСТИКА:**  
 • Приглашено друзей: {len(referrals_list)}  
@@ -451,16 +455,7 @@ async def show_referral(message: Message, state: FSMContext):
 👥 **ПРИГЛАШЁННЫЕ ДРУЗЬЯ:**  
 {chr(10).join([f"• {u}" for u in referrals_list]) if referrals_list else "Пока нет"}
 """
-    # Отправляем текст с кнопкой
-    await message.answer(
-        text,
-        parse_mode="Markdown",
-        reply_markup=referral_copy_keyboard(referral_link)
-    )
-
-    # Также можно показать саму ссылку в отдельном сообщении (если нужно)
-    # await message.answer(f"Ваша ссылка: `{referral_link}`", parse_mode="Markdown")
-
+    await message.answer(text, parse_mode="Markdown", reply_markup=main_menu())
 
 
 # ========== ПОЛУЧИТЬ БОНУС ==========
