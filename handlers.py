@@ -15,10 +15,10 @@ router = Router()
 
 @router.callback_query(F.data.startswith("copy_"))
 async def copy_referral_link(callback: CallbackQuery):
-    link = callback.data.split("_", 1)[1]  # извлекаем ссылку
+    link = callback.data.split("_", 1)[1]
     await callback.answer()
     await callback.message.answer(
-        f"📋 **Ваша реферальная ссылка** (нажмите и удерживайте, чтобы скопировать):\n\n`{link}`",
+        f"📋 **Ваша ссылка** (нажмите и удерживайте для копирования):\n\n`{link}`",
         parse_mode="Markdown"
     )
 
