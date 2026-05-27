@@ -13,6 +13,16 @@ from config import PRIZE_INFO, PRICE_FIRST, PRICE_DISCOUNT, TOTAL_TICKETS
 router = Router()
 
 
+@router.callback_query(F.data.startswith("copy_"))
+async def copy_referral_link(callback: CallbackQuery):
+    link = callback.data.split("_", 1)[1]  # извлекаем ссылку
+    await callback.answer()
+    await callback.message.answer(
+        f"📋 **Ваша реферальная ссылка** (нажмите и удерживайте, чтобы скопировать):\n\n`{link}`",
+        parse_mode="Markdown"
+    )
+
+
 # ========== ОТМЕНА ЛЮБОГО СОСТОЯНИЯ ==========
 @router.message(Command("cancel"))
 async def cancel_all(message: Message, state: FSMContext):
