@@ -134,7 +134,7 @@ async def show_lottery(message: Message, state: FSMContext):
             else:
                 price = PRICE_FIRST if user_ticket_count == 0 else PRICE_DISCOUNT
 
-        # -------- ВЫДЕЛЕНИЕ ПОСЛЕДНИХ 40 БИЛЕТОВ ----------
+        # Доступные билеты
         available = [num for num in range(1, TOTAL_TICKETS + 1) if num not in taken]
         total_available = len(available)
 
@@ -147,15 +147,8 @@ async def show_lottery(message: Message, state: FSMContext):
                     if ticket_num in taken:
                         row_buttons.append(InlineKeyboardButton(text="🔒", callback_data="sold"))
                     else:
-                        # Логика выделения последних 40 свободных билетов
-                        is_hot = False
-                        if total_available <= 40:
-                            is_hot = True
-                        else:
-                            if ticket_num > TOTAL_TICKETS - 40:
-                                is_hot = True
-                        button_text = f"{'🔥' if is_hot else ''}{ticket_num}"
-                        row_buttons.append(InlineKeyboardButton(text=button_text, callback_data=f"buy_{ticket_num}"))
+                        # Без выделения огнём – просто номер
+                        row_buttons.append(InlineKeyboardButton(text=str(ticket_num), callback_data=f"buy_{ticket_num}"))
             if row_buttons:
                 buttons.append(row_buttons)
 
@@ -216,7 +209,6 @@ async def show_lottery(message: Message, state: FSMContext):
     except Exception as e:
         await message.answer(f"❌ Ошибка: {str(e)}")
         print(f"Ошибка: {e}")
-
 
 # ========== ПОКУПКА БИЛЕТА (ОФОРМЛЕНИЕ ПОДПИСКИ) ==========
 @router.callback_query(F.data.startswith("buy_"))
