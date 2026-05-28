@@ -1,4 +1,5 @@
 import aiosqlite
+import asyncio
 from aiogram import Router, F
 from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery
@@ -11,37 +12,6 @@ from config import ADMIN_IDS, PRIZE_INFO, PRICE_FIRST, PRICE_DISCOUNT, TOTAL_TIC
 router = Router()
 
 
-# получить список всех пользователей
-all_users = await db.get_all_users()
-for uid, uname in all_users:
-    try:
-        await callback.bot.send_message(
-            uid,
-            f"🎉 Пользователь @{uname or uid} купил подписку и получил в подарок билет №{ticket_num}!"
-        )
-    except:
-        pass   # пользователь мог заблокировать бота
-
-
-
-@router.message(Command("test_admin"))
-async def test_admin(message: Message):
-    from config import ADMIN_IDS
-    await message.answer(f"ADMIN_IDS = {ADMIN_IDS}")
-    
-    for admin_id in ADMIN_IDS:
-        try:
-            await message.bot.send_message(admin_id, "✅ Тестовое сообщение админу")
-            await message.answer(f"✅ Сообщение отправлено админу {admin_id}")
-        except Exception as e:
-            await message.answer(f"❌ Ошибка при отправке админу {admin_id}: {e}")
-
-
-
-
-
-
-
 def is_admin(user_id: int) -> bool:
     return user_id in ADMIN_IDS
 
@@ -51,53 +21,40 @@ async def admin_panel(message: Message):
     if not is_admin(message.from_user.id):
         await message.answer("⛔ Доступ запрещен")
         return
-
-    await message.answer(
-        "🔐 АДМИН ПАНЕЛЬ\n\nВыберите действие:",
-        reply_markup=admin_menu()
-    )
+    await message.answer("🔐 АДМИН ПАНЕЛЬ\n\nВыберите действие:", reply_markup=admin_menu())
 
 
 @router.message(F.text == "📋 Ожидают оплаты")
 async def pending_payments(message: Message):
     if not is_admin(message.from_user.id):
         return
-
     async with aiosqlite.connect(db.DATABASE_PATH) as conn:
         cursor = await conn.execute("""
             SELECT id, user_id, ticket_number, receipt_photo, purchase_date, price_paid
-            FROM subscriptions 
-            WHERE payment_confirmed = 0
+            FROM subscriptions WHERE payment_confirmed = 0
         """)
         pending = await cursor.fetchall()
-
     if not pending:
         await message.answer("✅ Нет ожидающих оплат")
         return
-
     for sub_id, user_id, ticket_num, receipt, purchase_date, price in pending:
         try:
             user = await message.bot.get_chat(user_id)
             username = f"@{user.username}" if user.username else f"ID: {user_id}"
         except:
             username = f"ID: {user_id}"
-
         text = f"""
 📋 ОЖИДАЕТ ПОДТВЕРЖДЕНИЯ
 ━━━━━━━━━━━━━━━━━━━
 🆔 ID подписки: {sub_id}
 👤 Пользователь: {username}
-🎫 Билет: №{ticket_num}
+🎫 Билет в подарок: №{ticket_num}
 💰 Сумма: {price}₽
 🕐 Дата: {purchase_date}
 ━━━━━━━━━━━━━━━━━━━
 """
         try:
-            await message.bot.send_photo(
-                message.chat.id,
-                photo=receipt,
-                caption=text
-            )
+            await message.bot.send_photo(message.chat.id, photo=receipt, caption=text)
         except:
             await message.answer(text)
 
@@ -110,42 +67,32 @@ async def confirm_payment(callback: CallbackQuery):
 
     sub_id = int(callback.data.split("_")[1])
     sub_info = await db.get_pending_subscription(sub_id)
-
     if not sub_info:
         await callback.answer("❌ Подписка не найдена", show_alert=True)
         return
 
     user_id, ticket_num, receipt_photo, price = sub_info
-
     sold, buyer_id, bought_ticket = await db.confirm_payment(sub_id)
 
+    # Отмечаем реферала
     await db.mark_referral_bought(user_id)
 
-    # Проверяем акцию за 5 приведенных друзей
+    # Проверка акции за 5 приведенных друзей
     free_ticket_5 = await db.check_and_give_free_ticket_for_5_referrals(user_id)
 
-    # Проверяем реферера
+    # Реферер
     async with aiosqlite.connect(db.DATABASE_PATH) as conn:
-        cursor = await conn.execute("""
-            SELECT referrer_id FROM users WHERE user_id = ?
-        """, (user_id,))
+        cursor = await conn.execute("SELECT referrer_id FROM users WHERE user_id = ?", (user_id,))
         referrer_data = await cursor.fetchone()
-
         if referrer_data and referrer_data[0]:
             referrer_id = referrer_data[0]
             await db.mark_referral_free_ticket_given(referrer_id, user_id)
-            
-            # Проверяем, не получил ли реферер бесплатный билет за 5 друзей
-            five_referrals_reward = await db.check_and_give_free_ticket_for_5_referrals(referrer_id)
-            
-            if five_referrals_reward:
+            if await db.check_and_give_free_ticket_for_5_referrals(referrer_id):
                 try:
                     await callback.bot.send_message(
                         referrer_id,
-                        f"🎉 ПОЗДРАВЛЯЕМ! 🎉\n\n"
-                        f"Вы привели 5 друзей, которые купили билеты!\n"
-                        f"Вы получили БЕСПЛАТНЫЙ БИЛЕТ на выбор!\n\n"
-                        f"Напишите /free_ticket чтобы получить билет."
+                        f"🎉 ПОЗДРАВЛЯЕМ! Вы привели 5 друзей, которые оформили подписку!\n"
+                        f"Вы получили БЕСПЛАТНЫЙ БИЛЕТ на выбор!"
                     )
                 except:
                     pass
@@ -154,15 +101,13 @@ async def confirm_payment(callback: CallbackQuery):
     success_message = f"""
 ✅ ОПЛАТА ПОДТВЕРЖДЕНА ✅
 
-Ваш билет №{ticket_num} АКТИВИРОВАН!
+Ваша подписка активирована! В подарок получен лотерейный билет №{ticket_num}.
 
 💰 Оплачено: {price}₽
-📊 Продано: {sold}/{TOTAL_TICKETS}
+📊 Продано подписок: {sold}/{TOTAL_TICKETS}
 """
-
     if free_ticket_5:
-        success_message += f"\n🎉 ПОЗДРАВЛЯЕМ! Вы привели 5 друзей!\nПолучите БЕСПЛАТНЫЙ БИЛЕТ в разделе 'Акции'!"
-
+        success_message += f"\n🎉 ПОЗДРАВЛЯЕМ! Вы привели 5 друзей!\nПолучите БЕСПЛАТНЫЙ билет в разделе 'Акции'!"
     try:
         await callback.bot.send_message(user_id, success_message, reply_markup=main_menu())
     except:
@@ -171,10 +116,22 @@ async def confirm_payment(callback: CallbackQuery):
     await callback.message.edit_caption(
         caption=f"✅ ПОДТВЕРЖДЕНО ✅\nБилет №{ticket_num}\nПродано: {sold}/{TOTAL_TICKETS}\nСумма: {price}₽"
     )
-
     await callback.answer(f"✅ Оплата подтверждена! Продано {sold}/{TOTAL_TICKETS}")
 
-    # Проверка условий для розыгрыша
+    # ========== МАССОВАЯ РАССЫЛКА ВСЕМ ПОЛЬЗОВАТЕЛЯМ ==========
+    all_users = await db.get_all_users()
+    buyer_name = (await callback.bot.get_chat(user_id)).username or str(user_id)
+    for uid, uname in all_users:
+        try:
+            await callback.bot.send_message(
+                uid,
+                f"🎉 Пользователь @{buyer_name} оформил подписку и получил в подарок билет №{ticket_num}!"
+            )
+            await asyncio.sleep(0.05)  # задержка для избежания блокировки
+        except:
+            pass  # пользователь мог заблокировать бота
+
+    # ========== ПРОВЕРКА УСЛОВИЙ ДЛЯ РОЗЫГРЫША ==========
     status = await db.get_current_lottery_status()
     if status:
         sold_count, is_active, started_at = status
@@ -186,17 +143,15 @@ async def confirm_payment(callback: CallbackQuery):
 
         if sold_count >= TOTAL_TICKETS and is_active:
             should_draw = True
-            reason = "Проданы все 100 билетов"
+            reason = "Проданы все 100 подписок (билеты разыграны)"
             if is_timer_active:
                 await db.stop_lottery_timer()
-
         elif is_timer_active and timer_end:
             end_time = datetime.fromisoformat(timer_end) if isinstance(timer_end, str) else timer_end
             if datetime.now() >= end_time:
                 should_draw = True
                 reason = "Истекло 4 дня"
                 await db.stop_lottery_timer()
-
         elif sold_count >= 70 and not is_timer_active and is_active and sold_count < TOTAL_TICKETS:
             await db.start_lottery_timer()
             for admin_id in ADMIN_IDS:
@@ -204,7 +159,7 @@ async def confirm_payment(callback: CallbackQuery):
                     await callback.bot.send_message(
                         admin_id,
                         f"⏰ ЗАПУЩЕН ТАЙМЕР НА 4 ДНЯ!\n\n"
-                        f"Продано {sold_count}/{TOTAL_TICKETS} билетов\n"
+                        f"Продано подписок: {sold_count}/{TOTAL_TICKETS}\n"
                         f"Розыгрыш состоится через 4 дня!"
                     )
                 except:
@@ -254,34 +209,23 @@ async def reject_payment(callback: CallbackQuery):
     if not is_admin(callback.from_user.id):
         await callback.answer("⛔ Доступ запрещен", show_alert=True)
         return
-
     sub_id = int(callback.data.split("_")[1])
     sub_info = await db.get_pending_subscription(sub_id)
-
     if sub_info:
         user_id, ticket_num, receipt_photo, price = sub_info
-
         reject_message = f"""
 ❌ ОПЛАТА ОТКЛОНЕНА ❌
 
-Билет №{ticket_num} НЕ БУДЕТ АКТИВИРОВАН.
+Подписка не активирована. Билет №{ticket_num} НЕ БУДЕТ ВЫДАН.
 
-Причина: чек не прошел проверку.
-
-Пожалуйста, отправьте четкий чек заново.
+Причина: чек не прошел проверку. Пожалуйста, отправьте четкий чек заново.
 """
-
         try:
             await callback.bot.send_message(user_id, reject_message, reply_markup=main_menu())
         except:
             pass
-
         await db.delete_subscription(sub_id)
-
-        await callback.message.edit_caption(
-            caption=f"❌ ОТКАЗАНО ❌\nБилет №{ticket_num}\nПользователь уведомлен"
-        )
-
+        await callback.message.edit_caption(caption=f"❌ ОТКАЗАНО ❌\nБилет №{ticket_num}\nПользователь уведомлен")
         await callback.answer("❌ Оплата отклонена!", show_alert=True)
     else:
         await callback.answer("❌ Подписка не найдена", show_alert=True)
@@ -291,26 +235,17 @@ async def reject_payment(callback: CallbackQuery):
 async def force_draw(message: Message):
     if not is_admin(message.from_user.id):
         return
-
     winner = await db.start_lottery_draw()
-
     if winner:
         try:
             await message.bot.send_message(
                 winner["user_id"],
-                f"""
-🎉🎉🎉 ПОЗДРАВЛЯЕМ! ВЫ ПОБЕДИТЕЛЬ! 🎉🎉🎉
-
-ВЫ ВЫИГРАЛИ {PRIZE_INFO['name']}!!!
-
-Ваш билет №{winner['ticket']} оказался победным!
-
-С вами свяжется менеджер в ближайшее время!
-"""
+                f"🎉🎉🎉 ПОЗДРАВЛЯЕМ! ВЫ ПОБЕДИТЕЛЬ! 🎉🎉🎉\n\n"
+                f"ВЫ ВЫИГРАЛИ {PRIZE_INFO['name']}!!!\n\nВаш билет №{winner['ticket']} оказался победным!\n\n"
+                f"С вами свяжется менеджер в ближайшее время!"
             )
         except:
             pass
-
         await message.answer(
             f"✅ РОЗЫГРЫШ ПРОВЕДЕН!\n"
             f"━━━━━━━━━━━━━━━━━━━\n"
@@ -327,25 +262,18 @@ async def force_draw(message: Message):
 async def show_stats(message: Message):
     if not is_admin(message.from_user.id):
         return
-
     status = await db.get_current_lottery_status()
     tickets = await db.get_all_active_tickets()
-
     async with aiosqlite.connect(db.DATABASE_PATH) as conn:
         cursor = await conn.execute("SELECT COUNT(*) FROM subscriptions WHERE payment_confirmed = 0")
         pending_count = (await cursor.fetchone())[0]
-
         cursor = await conn.execute("SELECT COUNT(*) FROM users")
         users_count = (await cursor.fetchone())[0]
-
         cursor = await conn.execute("SELECT SUM(price_paid) FROM subscriptions WHERE payment_confirmed = 1")
         total_revenue = (await cursor.fetchone())[0] or 0
-
     sold = status[0] if status else 0
-
     timer_info = await db.get_timer_status()
     timer_active, timer_end = timer_info if timer_info else (False, None)
-
     timer_text = ""
     if timer_active and timer_end:
         end_time = datetime.fromisoformat(timer_end) if isinstance(timer_end, str) else timer_end
@@ -354,22 +282,21 @@ async def show_stats(message: Message):
         hours = time_left.seconds // 3600
         minutes = (time_left.seconds % 3600) // 60
         timer_text = f"\n⏰ ДО РОЗЫГРЫША: {days}д {hours}ч {minutes}мин"
-
     stats = f"""
 📊 СТАТИСТИКА БОТА
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 👥 ВСЕГО ПОЛЬЗОВАТЕЛЕЙ: {users_count}
-🎫 АКТИВНЫХ БИЛЕТОВ: {len(tickets)}
-🎰 ПРОДАНО БИЛЕТОВ: {sold}/{TOTAL_TICKETS}
-✨ ОСТАЛОСЬ: {TOTAL_TICKETS - sold}
+🎫 АКТИВНЫХ БИЛЕТОВ-ПОДАРКОВ: {len(tickets)}
+🎰 ПРОДАНО ПОДПИСОК: {sold}/{TOTAL_TICKETS}
+✨ ОСТАЛОСЬ БИЛЕТОВ: {TOTAL_TICKETS - sold}
 ⏳ ОЖИДАЮТ ОПЛАТЫ: {pending_count}{timer_text}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 💰 СОБРАНО СРЕДСТВ: {total_revenue}₽
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🎁 ЦЕНЫ:
-• Первая подписка + билет: {PRICE_FIRST}₽
+🎁 ЦЕНЫ ПОДПИСОК:
+• Первая: {PRICE_FIRST}₽ (билет в подарок)
 • Последующие: {PRICE_DISCOUNT}₽
-• Для приведенных друзей (первый): 500₽
+• Для приведённых друзей (первая): 500₽
 """
     await message.answer(stats)
 
@@ -378,10 +305,8 @@ async def show_stats(message: Message):
 async def reset_all_tickets(message: Message):
     if not is_admin(message.from_user.id):
         return
-
     async with aiosqlite.connect(db.DATABASE_PATH) as conn:
         await conn.execute("DELETE FROM subscriptions WHERE payment_confirmed = 0")
         await conn.execute("UPDATE current_lottery SET tickets_sold = 0 WHERE id = 1")
         await conn.commit()
-
-    await message.answer("✅ ВСЕ ДАННЫЕ СБРОШЕНЫ!\n\nВсе билеты очищены, счетчик обнулен.")
+    await message.answer("✅ ВСЕ ДАННЫЕ СБРОШЕНЫ!\n\nВсе неоплаченные заявки удалены, счётчик подписок обнулён.")
