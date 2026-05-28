@@ -4,6 +4,13 @@ from datetime import datetime, timedelta
 DATABASE_PATH = "lottery.db"
 
 
+
+async def get_all_users():
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        cursor = await db.execute("SELECT user_id, username FROM users")
+        return await cursor.fetchall()
+
+
 async def init_db():
     async with aiosqlite.connect(DATABASE_PATH) as db:
         # Пользователи
