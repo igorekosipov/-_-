@@ -12,11 +12,13 @@ from config import PRIZE_INFO, PRICE_FIRST, PRICE_DISCOUNT, TOTAL_TICKETS
 
 router = Router()
 
-# ========== ОТМЕНА ==========
+
+# ========== ОТМЕНА ЛЮБОГО СОСТОЯНИЯ ==========
 @router.message(Command("cancel"))
 async def cancel_all(message: Message, state: FSMContext):
     await state.clear()
-    await message.answer("✅ Действие отменено.", reply_markup=main_menu())
+    await message.answer("✅ Действие отменено. Возврат в главное меню.", reply_markup=main_menu())
+
 
 # ========== СТАРТ ==========
 @router.message(Command("start"))
@@ -31,10 +33,17 @@ async def cmd_start(message: Message, state: FSMContext):
                 referrer_id = None
         except:
             pass
-    await db.add_user(message.from_user.id, message.from_user.username, message.from_user.full_name, referrer_id)
+
+    await db.add_user(
+        message.from_user.id,
+        message.from_user.username,
+        message.from_user.full_name,
+        referrer_id
+    )
     if referrer_id and referrer_id != message.from_user.id:
         await db.add_referral(referrer_id, message.from_user.id)
     await db.cleanup_expired_subscriptions()
+
     welcome_text = """
 🎉 Добро пожаловать в розыгрыш ценных призов!
 
@@ -52,6 +61,7 @@ async def cmd_start(message: Message, state: FSMContext):
 """
     await message.answer(welcome_text, reply_markup=main_menu())
 
+
 # ========== ПРАВИЛА ==========
 @router.message(F.text == "📋 Правила")
 async def show_rules(message: Message, state: FSMContext):
@@ -65,16 +75,17 @@ async def show_rules(message: Message, state: FSMContext):
 ✅ Приз высылается в течение 3 дней после розыгрыша
 
 Как участвовать:
-1. Оформите подписку на бота
-2. В ПОДАРОК вы получаете лотерейный билет
-3. Ждите розыгрыша и забирайте приз!
+1. Оформите подписку на бота (в подарок получаете лотерейный билет)
+2. Ждите розыгрыша
+3. Забирайте приз!
 
-ЦЕНЫ:
+ЦЕНЫ ПОДПИСОК:
 • Первая подписка — 800₽ (билет в подарок)
 • Последующие подписки — 700₽ (билет в подарок)
-• Для приведенных друзей: первая подписка — 500₽
+• Для приведённых друзей: первая подписка — 500₽
 """
     await message.answer(rules, reply_markup=main_menu())
+
 
 # ========== КАК ПОЛУЧИТЬ ПРИЗ ==========
 @router.message(F.text == "📦 Как получить приз")
@@ -91,6 +102,7 @@ async def how_to_get_prize(message: Message, state: FSMContext):
 Для связи с менеджером: @manager_username
 """
     await message.answer(text, reply_markup=main_menu())
+
 
 # ========== РОЗЫГРЫШ (ПОКАЗ БИЛЕТОВ) ==========
 @router.message(F.text == "🎁 Розыгрыш")
@@ -112,10 +124,8 @@ async def show_lottery(message: Message, state: FSMContext):
             taken_rows = await cursor.fetchall()
             taken = set([row[0] for row in taken_rows])
 
-        available = [num for num in range(1, TOTAL_TICKETS + 1) if num not in taken]
-        total_available = len(available)
-
         user_ticket_count = await db.get_user_ticket_count(message.from_user.id)
+
         async with aiosqlite.connect(db.DATABASE_PATH) as conn:
             cursor = await conn.execute("SELECT referrer_id FROM users WHERE user_id = ?", (message.from_user.id,))
             referrer_data = await cursor.fetchone()
@@ -123,6 +133,10 @@ async def show_lottery(message: Message, state: FSMContext):
                 price = 500
             else:
                 price = PRICE_FIRST if user_ticket_count == 0 else PRICE_DISCOUNT
+
+        # -------- ВЫДЕЛЕНИЕ ПОСЛЕДНИХ 40 БИЛЕТОВ ----------
+        available = [num for num in range(1, TOTAL_TICKETS + 1) if num not in taken]
+        total_available = len(available)
 
         buttons = []
         for i in range(0, 104, 8):
@@ -133,7 +147,7 @@ async def show_lottery(message: Message, state: FSMContext):
                     if ticket_num in taken:
                         row_buttons.append(InlineKeyboardButton(text="🔒", callback_data="sold"))
                     else:
-                        # Выделение последних 40 свободных билетов (огнём)
+                        # Логика выделения последних 40 свободных билетов
                         is_hot = False
                         if total_available <= 40:
                             is_hot = True
@@ -169,7 +183,7 @@ async def show_lottery(message: Message, state: FSMContext):
         elif sold >= 70 and not is_timer_active:
             timer_text = "🎯 ТАЙМЕР ЗАПУСТИТСЯ ПРИ ДОСТИЖЕНИИ 70 ПРОДАННЫХ ПОДПИСОК!"
         elif sold >= TOTAL_TICKETS:
-            timer_text = "🎲 ВСЕ БИЛЕТЫ ПРОДАНЫ! РОЗЫГРЫШ СОСТОИТСЯ СЕЙЧАС!"
+            timer_text = "🎲 ВСЕ БИЛЕТЫ РАЗЫГРАНЫ! РОЗЫГРЫШ СОСТОИТСЯ СЕЙЧАС!"
         elif sold < 70:
             timer_text = f"⏳ ДО ЗАПУСКА ТАЙМЕРА: {70 - sold} подписок"
 
@@ -180,8 +194,8 @@ async def show_lottery(message: Message, state: FSMContext):
 📝 ОПИСАНИЕ: {PRIZE_INFO['description']}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🎫 ПРОДАНО ПОДПИСОК: {sold}/{TOTAL_TICKETS}
-✨ ДОСТУПНО ПОДПИСОК: {TOTAL_TICKETS - sold}
-💰 ЦЕНА: {price}₽ (билет в подарок)
+✨ ДОСТУПНО БИЛЕТОВ-ПОДАРКОВ: {total_available}
+💰 ЦЕНА ПОДПИСКИ: {price}₽
 {timer_text}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 👇 ВЫБЕРИТЕ НОМЕР БИЛЕТА (1-100):
@@ -201,13 +215,15 @@ async def show_lottery(message: Message, state: FSMContext):
 
     except Exception as e:
         await message.answer(f"❌ Ошибка: {str(e)}")
-        print(f"Ошибка в show_lottery: {e}")
+        print(f"Ошибка: {e}")
 
-# ========== ПОКУПКА БИЛЕТА ==========
+
+# ========== ПОКУПКА БИЛЕТА (ОФОРМЛЕНИЕ ПОДПИСКИ) ==========
 @router.callback_query(F.data.startswith("buy_"))
 async def buy_ticket(callback: CallbackQuery, state: FSMContext):
     try:
         ticket_num = int(callback.data.split("_")[1])
+
         async with aiosqlite.connect(db.DATABASE_PATH) as conn:
             cursor = await conn.execute(
                 "SELECT id FROM subscriptions WHERE ticket_number = ? AND payment_confirmed = 1 AND expires_at > ?",
@@ -217,6 +233,7 @@ async def buy_ticket(callback: CallbackQuery, state: FSMContext):
                 await callback.answer("❌ Этот билет уже куплен!", show_alert=True)
                 return
 
+        # Количество уже подтверждённых подписок
         async with aiosqlite.connect(db.DATABASE_PATH) as conn:
             cursor = await conn.execute("""
                 SELECT COUNT(*) FROM subscriptions 
@@ -248,6 +265,7 @@ async def buy_ticket(callback: CallbackQuery, state: FSMContext):
 
 ⚠️ ВАЖНО: После оплаты отправьте чек в этот чат.
 """
+
         await callback.message.delete()
         await callback.message.answer(payment_text)
         await state.set_state(PaymentStates.waiting_for_receipt)
@@ -255,6 +273,7 @@ async def buy_ticket(callback: CallbackQuery, state: FSMContext):
 
     except Exception as e:
         await callback.message.answer(f"❌ Ошибка: {str(e)}")
+
 
 # ========== ОТМЕНА ПОКУПКИ ==========
 @router.callback_query(F.data == "cancel")
@@ -264,6 +283,7 @@ async def cancel_purchase(callback: CallbackQuery, state: FSMContext):
     await callback.message.answer("❌ Покупка отменена", reply_markup=main_menu())
     await callback.answer()
 
+
 # ========== ОБНОВЛЕНИЕ РОЗЫГРЫША ==========
 @router.callback_query(F.data == "refresh")
 async def refresh_lottery(callback: CallbackQuery, state: FSMContext):
@@ -272,9 +292,11 @@ async def refresh_lottery(callback: CallbackQuery, state: FSMContext):
     await show_lottery(callback.message, state)
     await callback.answer()
 
+
 @router.callback_query(F.data == "sold")
 async def sold_ticket(callback: CallbackQuery):
-    await callback.answer("❌ Этот билет уже продан!", show_alert=True)
+    await callback.answer("❌ Этот билет уже куплен!", show_alert=True)
+
 
 # ========== ОБРАБОТКА ЧЕКА ==========
 @router.message(PaymentStates.waiting_for_receipt, F.photo)
@@ -283,6 +305,7 @@ async def handle_receipt(message: Message, state: FSMContext):
         data = await state.get_data()
         ticket_num = data.get("ticket_number")
         price = data.get("price", PRICE_FIRST)
+
         if not ticket_num:
             await message.answer("❌ Ошибка: начните заново", reply_markup=main_menu())
             await state.clear()
@@ -305,7 +328,7 @@ async def handle_receipt(message: Message, state: FSMContext):
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 👤 Пользователь: @{message.from_user.username or message.from_user.full_name}
 🆔 ID: {message.from_user.id}
-🎫 Билет №{ticket_num}
+🎫 Билет в подарок №{ticket_num}
 💰 Сумма: {price}₽
 🕐 Время: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 """
@@ -331,6 +354,7 @@ async def handle_receipt(message: Message, state: FSMContext):
         await message.answer(f"❌ Ошибка: {str(e)}")
         await state.clear()
 
+
 @router.message(PaymentStates.waiting_for_receipt)
 async def invalid_receipt(message: Message, state: FSMContext):
     await message.answer(
@@ -338,6 +362,7 @@ async def invalid_receipt(message: Message, state: FSMContext):
         "Если хотите отменить покупку, напишите /cancel",
         reply_markup=main_menu()
     )
+
 
 # ========== ТВОИ БИЛЕТЫ ==========
 @router.message(F.text == "🎫 Твои билеты")
@@ -347,15 +372,16 @@ async def show_my_tickets(message: Message, state: FSMContext):
         tickets = await db.get_user_tickets(message.from_user.id)
         confirmed_tickets = [t for t in tickets if t[2] == 1]
         if not confirmed_tickets:
-            await message.answer("📭 У вас пока нет активных билетов.\n\nОформите подписку в разделе 'Розыгрыш'.", reply_markup=main_menu())
+            await message.answer("📭 У вас пока нет активных билетов-подарков.", reply_markup=main_menu())
             return
-        text = "🎫 ТВОИ БИЛЕТЫ (получены в подарок за подписки):\n━━━━━━━━━━━━━━━━━\n"
+        text = "🎫 ТВОИ БИЛЕТЫ (ПОДАРКИ ЗА ПОДПИСКУ):\n━━━━━━━━━━━━━━━━━\n"
         for ticket_num, purchase_date, confirmed in confirmed_tickets:
             date_str = datetime.fromisoformat(purchase_date).strftime('%d.%m.%Y')
-            text += f"🔸 Билет №{ticket_num} (куплен {date_str})\n"
+            text += f"🔸 Билет №{ticket_num} (получен {date_str})\n"
         await message.answer(text, reply_markup=main_menu())
     except Exception as e:
         await message.answer(f"❌ Ошибка: {str(e)}")
+
 
 # ========== ПОСЛЕДНИЙ БИЛЕТ ==========
 @router.message(F.text == "🏆 Последний билет")
@@ -366,11 +392,25 @@ async def last_draw_winner(message: Message, state: FSMContext):
         if winner:
             winner_id, winner_ticket, draw_date = winner
             date_str = datetime.fromisoformat(draw_date).strftime('%d.%m.%Y %H:%M')
-            await message.answer(f"🏆 ПОСЛЕДНИЙ РОЗЫГРЫШ\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n🎲 ВЫИГРЫШНЫЙ БИЛЕТ: №{winner_ticket}\n📅 ДАТА: {date_str}\n🎁 ПРИЗ: {PRIZE_INFO['name']}", reply_markup=main_menu())
+            await message.answer(
+                f"🏆 ПОСЛЕДНИЙ РОЗЫГРЫШ\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                f"🎲 ВЫИГРЫШНЫЙ БИЛЕТ: №{winner_ticket}\n"
+                f"📅 ДАТА: {date_str}\n"
+                f"🎁 ПРИЗ: {PRIZE_INFO['name']}",
+                reply_markup=main_menu()
+            )
         else:
-            await message.answer("📭 Пока не было проведено ни одного розыгрыша.", reply_markup=main_menu())
+            await message.answer(
+                "📭 Пока не было проведено ни одного розыгрыша.\n\n"
+                "Розыгрыш состоится когда:\n"
+                "• Будет продано 70+ подписок, или\n"
+                "• Пройдёт 4 дня, или\n"
+                "• Будут разыграны все 100 билетов",
+                reply_markup=main_menu()
+            )
     except Exception as e:
         await message.answer(f"❌ Ошибка: {str(e)}")
+
 
 # ========== АКЦИИ ==========
 @router.message(F.text == "🎁 Акции")
@@ -400,6 +440,7 @@ async def show_promotions(message: Message, state: FSMContext):
 """
     await message.answer(text, reply_markup=main_menu())
 
+
 # ========== РЕФЕРАЛЬНАЯ ССЫЛКА ==========
 @router.message(F.text == "👥 Реферальная ссылка")
 async def show_referral(message: Message, state: FSMContext):
@@ -407,8 +448,10 @@ async def show_referral(message: Message, state: FSMContext):
     user_id = message.from_user.id
     bot_username = (await message.bot.get_me()).username
     referral_link = f"https://t.me/{bot_username}?start=ref_{user_id}"
+
     referrals_count = await db.get_referrals_count(user_id)
     referrals_list = await db.get_referral_list(user_id)
+
     text = f"""
 👥 **РЕФЕРАЛЬНАЯ ПРОГРАММА**
 
@@ -425,9 +468,10 @@ async def show_referral(message: Message, state: FSMContext):
 • ДРУЗЬЯ получают первую подписку за **500₽**
 
 👥 **ПРИГЛАШЁННЫЕ ДРУЗЬЯ:**  
-{chr(10).join([f"• @{u[1]}" for u in referrals_list]) if referrals_list else "Пока нет"}
+{chr(10).join([f"• @{u[1]}" if u[1] else f"• ID:{u[0]}" for u in referrals_list]) if referrals_list else "Пока нет"}
 """
     await message.answer(text, parse_mode="Markdown", reply_markup=main_menu())
+
 
 # ========== ПОЛУЧИТЬ БОНУС ==========
 @router.message(F.text == "🎁 Получить бонус")
@@ -443,7 +487,7 @@ async def get_bonus(message: Message, state: FSMContext):
 1️⃣ Перейди в бота @OsipovIIbot
 2️⃣ Нажми кнопку *"Пополнить"*
 3️⃣ Выбери *"Бонус за розыгрыш"*
-4️⃣ Отправь скриншот этого чека (или скриншот подтвержденной оплаты)
+4️⃣ Отправь скриншот этого чека (или скриншот подтверждённой оплаты подписки)
 
 ✨ Бонус будет начислен автоматически после проверки!
 
