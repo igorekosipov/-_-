@@ -99,7 +99,7 @@ async def how_to_get_prize(message: Message, state: FSMContext):
 3️⃣ Менеджер уточнит данные для отправки
 4️⃣ Приз отправляется СДЭКом в течение 3 дней
 
-Для связи с менеджером: @manager_username
+Для связи с менеджером: @IgoroOsipov1
 """
     await message.answer(text, reply_markup=main_menu())
 
