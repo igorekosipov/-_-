@@ -11,6 +11,16 @@ from config import ADMIN_IDS, PRIZE_INFO, PRICE_FIRST, PRICE_DISCOUNT, TOTAL_TIC
 router = Router()
 
 
+# получить список всех пользователей
+all_users = await db.get_all_users()
+for uid, uname in all_users:
+    try:
+        await callback.bot.send_message(
+            uid,
+            f"🎉 Пользователь @{uname or uid} купил подписку и получил в подарок билет №{ticket_num}!"
+        )
+    except:
+        pass   # пользователь мог заблокировать бота
 
 
 
