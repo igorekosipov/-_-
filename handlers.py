@@ -145,18 +145,29 @@ async def show_lottery(message: Message, state: FSMContext):
                 price = PRICE_FIRST if user_ticket_count == 0 else PRICE_DISCOUNT
 
         buttons = []
-        for i in range(0, 104, 8):
-            row_buttons = []
-            for j in range(1, 9):
-                ticket_num = i + j
-                if 1 <= ticket_num <= TOTAL_TICKETS:
-                    if ticket_num in taken:
-                        row_buttons.append(InlineKeyboardButton(text="🔒", callback_data="sold"))
-                    else:
-                        row_buttons.append(InlineKeyboardButton(text=str(ticket_num), callback_data=f"buy_{ticket_num}"))
-            if row_buttons:
-                buttons.append(row_buttons)
+available_sorted = sorted(available)   # список свободных билетов
+total_available = len(available_sorted)
 
+for i in range(0, 104, 8):
+    row_buttons = []
+    for j in range(1, 9):
+        ticket_num = i + j
+        if 1 <= ticket_num <= TOTAL_TICKETS:
+            if ticket_num in taken:
+                row_buttons.append(InlineKeyboardButton(text="🔒", callback_data="sold"))
+            else:
+                # проверка на последние 40 мест
+                is_hot = False
+                if total_available <= 40:
+                    is_hot = True
+                else:
+                    if ticket_num > TOTAL_TICKETS - 40:   # для 100 билетов >60
+                        is_hot = True
+                button_text = f"{'🔥' if is_hot else ''}{ticket_num}"
+                row_buttons.append(InlineKeyboardButton(text=button_text, callback_data=f"buy_{ticket_num}"))
+    if row_buttons:
+        buttons.append(row_buttons)
+        
         buttons.append([
             InlineKeyboardButton(text="🔄 Обновить", callback_data="refresh"),
             InlineKeyboardButton(text="❌ Отмена", callback_data="cancel")
