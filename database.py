@@ -5,12 +5,6 @@ DATABASE_PATH = "lottery.db"
 
 
 
-async def get_all_users():
-    async with aiosqlite.connect(DATABASE_PATH) as db:
-        cursor = await db.execute("SELECT user_id, username FROM users")
-        return await cursor.fetchall()
-
-
 async def init_db():
     async with aiosqlite.connect(DATABASE_PATH) as db:
         # Пользователи
@@ -358,3 +352,9 @@ async def get_timer_status():
             SELECT is_timer_active, timer_end FROM current_lottery WHERE id = 1
         """)
         return await cursor.fetchone()
+
+
+async def get_all_users():
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        cursor = await db.execute("SELECT user_id, username FROM users")
+        return await cursor.fetchall()
